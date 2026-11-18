@@ -1362,7 +1362,72 @@ async function startServer() {
     }
   });
 
-  // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
+  /** Build case-insensitive & compact lookup variants for memberId / barcode / secondaryBarcodes queries. */
+  const buildMemberCodeVariants = (rawTerm: string): string[] => {
+    const clean = String(rawTerm || '')
+      .trim()
+      .replace(/^#/, '')
+      .replace(/^mem-/i, '')
+      .trim();
+    if (!clean) return [];
+    const compact = clean.replace(/\s|-/g, '');
+    return Array.from(
+      new Set([
+        clean,
+        clean.toUpperCase(),
+        clean.toLowerCase(),
+        compact,
+        compact.toUpperCase(),
+        compact.toLowerCase(),
+      ].filter(Boolean))
+    ).slice(0, 10);
+  };
+
+  /** Prefer Inzan letter-prefixed barcode (e.g. P20, Q1496, C238, O851) when memberId holds internal redgitsId/cardId. */
+  const resolvePreferredMemberCode = (data: any, fallbackId = ''): string => {
+    const mid = String(data?.memberId || '').replace(/^#/, '').trim();
+    const bc = String(data?.barcode || '').replace(/^#/, '').trim();
+    const rgId = String(data?.redgitsId || '').trim();
+    const cardId = String(data?.cardId || '').trim();
+    if (bc && /^[qcpo]\s*-?\s*\d+$/i.test(bc)) {
+      if (!mid || mid === rgId || mid === cardId || /^redgits-/i.test(mid)) {
+        return bc.replace(/\s+/g, '').toUpperCase();
+      }
+    }
+    if (mid && /^[qcpo]\s*-?\s*\d+$/i.test(mid)) {
+      return mid.replace(/\s+/g, '').toUpperCase();
+    }
+    return mid || (bc ? (/^[qcpo]/i.test(bc) ? bc.toUpperCase() : bc) : '') || fallbackId;
+  };
+
+  /** Lookup a client doc across memberId, barcode, secondaryBarcodes, integer memberId, doc ID, and email. */
+  const findClientDocByCodeOrId = async (
+    db: FirebaseFirestore.Firestore,
+    rawTerm: string
+  ): Promise<FirebaseFirestore.DocumentSnapshot | null> => {
+    const variants = buildMemberCodeVariants(rawTerm);
+    const cleanId = rawTerm.trim().replace(/^#/, '').toLowerCase().replace(/^mem-/, '');
+    if (variants.length > 0) {
+      const [midSnap, bcSnap, secSnap] = await Promise.all([
+        db.collection("clients").where("memberId", "in", variants).limit(1).get(),
+        db.collection("clients").where("barcode", "in", variants).limit(1).get(),
+        db.collection("clients").where("secondaryBarcodes", "array-contains-any", variants).limit(1).get(),
+      ]);
+      if (!midSnap.empty) return midSnap.docs[0]!;
+      if (!bcSnap.empty) return bcSnap.docs[0]!;
+      if (!secSnap.empty) return secSnap.docs[0]!;
+    }
+    if (/^\d+$/.test(cleanId)) {
+      const qNum = await db.collection("clients").where("memberId", "==", parseInt(cleanId, 10)).limit(1).get();
+      if (!qNum.empty) return qNum.docs[0]!;
+    }
+    if (!rawTerm.includes("/")) {
+      const docById = await db.collection("clients").doc(rawTerm.trim()).get();
+      if (docById.exists) return docById;
+    }
+    return null;
+  };
+
   // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
   // Supports multi-profile family accounts sharing 1 phone number
   app.post("/api/member/resolve-email", async (req, res) => {
@@ -1379,10 +1444,9 @@ async function startServer() {
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId || (config?.firestoreDatabaseId ? config.firestoreDatabaseId.replace(/^db-/, '') : 'default');
 
-      const rawTerm = rawSearch;
+      const rawTerm = rawSearch.replace(/^#/, '').trim();
       const cleanId = rawTerm.toLowerCase().replace(/^mem-/, '');
-      const numId = parseInt(cleanId, 10);
-      const chosenTarget = (selectedMemberId || childId || '').toString().trim();
+      const chosenTarget = (selectedMemberId || childId || '').toString().replace(/^#/, '').trim();
 
       // Search queries against clients collection
       let clientData: any = null;
@@ -1423,7 +1487,16 @@ async function startServer() {
         const matchedDocs = Array.from(matchedMap.values());
 
         if (chosenTarget) {
-          const found = matchedDocs.find(d => d.id === chosenTarget || String(d.data().memberId) === chosenTarget);
+          const chosenLower = chosenTarget.toLowerCase();
+          const found = matchedDocs.find(d => {
+            const dData = d.data();
+            return (
+              d.id === chosenTarget ||
+              String(dData.memberId || '').toLowerCase() === chosenLower ||
+              String(dData.barcode || '').toLowerCase() === chosenLower ||
+              resolvePreferredMemberCode(dData, d.id).toLowerCase() === chosenLower
+            );
+          });
           if (found) {
             clientData = found.data();
             clientDocId = found.id;
@@ -1434,7 +1507,7 @@ async function startServer() {
             const data = d.data();
             return {
               id: d.id,
-              memberId: data.memberId || d.id,
+              memberId: resolvePreferredMemberCode(data, d.id),
               name: data.name || 'Student',
               category: data.memberCategory || data.category || 'Adults',
               branch: data.branch || data.branchId || 'main',
@@ -1456,39 +1529,12 @@ async function startServer() {
         }
       }
 
-      // 1. Exact string match on memberId
+      // 1-4. Lookup by memberId, barcode (e.g. P20/Q/C/O), secondaryBarcodes, integer memberId, or doc ID
       if (!clientData) {
-        const q1 = await db.collection("clients").where("memberId", "==", rawTerm).limit(1).get();
-        if (!q1.empty) {
-          clientData = q1.docs[0]!.data();
-          clientDocId = q1.docs[0]!.id;
-        }
-      }
-
-      // 2. Clean numeric string match on memberId
-      if (!clientData) {
-        const q2 = await db.collection("clients").where("memberId", "==", cleanId).limit(1).get();
-        if (!q2.empty) {
-          clientData = q2.docs[0]!.data();
-          clientDocId = q2.docs[0]!.id;
-        }
-      }
-
-      // 3. Integer number match on memberId (if numeric)
-      if (!clientData && !isNaN(numId)) {
-        const q3 = await db.collection("clients").where("memberId", "==", numId).limit(1).get();
-        if (!q3.empty) {
-          clientData = q3.docs[0]!.data();
-          clientDocId = q3.docs[0]!.id;
-        }
-      }
-
-      // 4. Direct doc ID match
-      if (!clientData) {
-        const docById = await db.collection("clients").doc(rawTerm).get();
-        if (docById.exists) {
-          clientData = docById.data();
-          clientDocId = docById.id;
+        const matchedDoc = await findClientDocByCodeOrId(db, rawTerm);
+        if (matchedDoc && matchedDoc.exists) {
+          clientData = matchedDoc.data();
+          clientDocId = matchedDoc.id;
         }
       }
 
@@ -1505,8 +1551,10 @@ async function startServer() {
         return res.status(404).json({ error: "Member ID or phone not found. Please verify your details or contact the front desk." });
       }
 
-      // Determine the deterministic auth user
-      const effectiveMemberId = String(clientData.memberId || cleanId).toLowerCase();
+      // Preserve the canonical letter-prefixed display code (e.g. P20) without mutating memberId/barcode
+      const preferredDisplayCode = resolvePreferredMemberCode(clientData, clientDocId);
+      const effectiveMemberId = String(clientData.memberId || preferredDisplayCode || cleanId).toLowerCase();
+      const preferredCodeLower = String(preferredDisplayCode || effectiveMemberId).toLowerCase();
       const syntheticEmail = `member-${effectiveMemberId}@${tenantId}.mitrixo-member.local`;
 
       let authUser: any = null;
@@ -1517,15 +1565,19 @@ async function startServer() {
       }
 
       if (!authUser) {
-        const candidateEmails = [
+        const candidateEmails = Array.from(new Set([
           clientData.authEmail,
           clientData.email,
+          `member-${effectiveMemberId}@${tenantId}.mitrixo-member.local`,
+          `member-${preferredCodeLower}@${tenantId}.mitrixo-member.local`,
+          `member-${effectiveMemberId}@${tenantId}-member.local`,
+          `member-${preferredCodeLower}@${tenantId}-member.local`,
           `member-${effectiveMemberId}@strike-member.local`,
           `member-${effectiveMemberId}@strike.mitrixo-member.local`,
           `member-${effectiveMemberId}@default.mitrixo-member.local`,
           `member-${effectiveMemberId}@mitrixogymcrm-member.local`,
           syntheticEmail
-        ].filter(Boolean) as string[];
+        ].filter(Boolean) as string[]));
 
         for (const candidate of candidateEmails) {
           try {
@@ -1537,11 +1589,11 @@ async function startServer() {
 
       if (!authUser) {
         const emailToCreate = clientData.authEmail || clientData.email || syntheticEmail;
-        console.log(`[Auth] Auto-provisioning auth user for member ${effectiveMemberId}: ${emailToCreate}`);
+        console.log(`[Auth] Auto-provisioning auth user for member ${preferredDisplayCode} (${effectiveMemberId}): ${emailToCreate}`);
         authUser = await authClient.createUser({
           email: emailToCreate,
           password: (req.body && req.body.password) || '12345678',
-          displayName: clientData.name || `Member ${effectiveMemberId}`
+          displayName: clientData.name || `Member ${preferredDisplayCode}`
         });
       }
 
@@ -1555,20 +1607,21 @@ async function startServer() {
         } catch {}
       }
 
-      // Ensure user document exists in tenant users collection for requireAuth middleware
+      // Ensure user document exists in tenant users collection without mutating clientData.memberId / barcode
       if (authUser) {
         await db.collection("users").doc(authUser.uid).set({
           uid: authUser.uid,
           email: emailToUse,
-          name: clientData.name || `Member ${effectiveMemberId}`,
+          name: clientData.name || `Member ${preferredDisplayCode}`,
           role: 'client',
-          clientRecordId: String(clientData.memberId || clientDocId),
+          clientRecordId: String(clientData.memberId || preferredDisplayCode || clientDocId),
+          clientDocId,
           tenantId,
           updatedAt: new Date().toISOString()
         }, { merge: true });
 
-        // Link portalUserId on client document
-        if (clientDocId) {
+        // Link portalUserId on client document only if missing or changed
+        if (clientDocId && (clientData.portalUserId !== authUser.uid || clientData.authEmail !== emailToUse)) {
           await db.collection("clients").doc(clientDocId).set({
             portalUserId: authUser.uid,
             authEmail: emailToUse
@@ -1582,14 +1635,14 @@ async function startServer() {
         success: true,
         email: emailToUse,
         name: clientData.name,
-        memberId: clientData.memberId,
+        memberId: preferredDisplayCode,
         clientDocId,
         category: clientData.memberCategory || clientData.category || 'Adults',
         branch: clientData.branch || clientData.branchId || 'main',
         status: effectiveStatus,
         client: {
           id: clientDocId,
-          memberId: clientData.memberId,
+          memberId: preferredDisplayCode,
           name: clientData.name,
           email: emailToUse,
           status: effectiveStatus
@@ -1613,20 +1666,16 @@ async function startServer() {
       const callerEmail = (req as any).user?.email || '';
       const callerUid = (req as any).user?.uid || '';
 
-      // Resolve target profile doc
-      let targetDoc = await db.collection("clients").doc(targetClientId).get();
-      if (!targetDoc.exists) {
-        const snap = await db.collection("clients").where("memberId", "==", targetClientId).limit(1).get();
-        if (!snap.empty) {
-          targetDoc = snap.docs[0]!;
-        }
-      }
+      // Resolve target profile doc (supports docId, memberId, barcode P20/Q/C/O, secondaryBarcodes)
+      const resolvedDoc = await findClientDocByCodeOrId(db, targetClientId);
 
-      if (!targetDoc.exists) {
+      if (!resolvedDoc || !resolvedDoc.exists) {
         return res.status(404).json({ error: "Target student profile not found" });
       }
+      const targetDoc = resolvedDoc;
 
       const targetData = targetDoc.data()!;
+      const preferredMemberCode = resolvePreferredMemberCode(targetData, targetDoc.id);
 
       // Verify permission: caller must either be admin or share phone/parentId
       let callerClient: any = null;
@@ -1648,10 +1697,10 @@ async function startServer() {
 
       return res.json({
         success: true,
-        active_member_id: targetData.memberId || targetDoc.id,
+        active_member_id: preferredMemberCode,
         activeProfile: {
           id: targetDoc.id,
-          memberId: targetData.memberId || targetDoc.id,
+          memberId: preferredMemberCode,
           name: targetData.name || 'Student',
           category: targetData.memberCategory || targetData.category || 'Adults',
           branch: targetData.branch || targetData.branchId || 'main',
@@ -4870,21 +4919,13 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         }
       }
 
-      const memberIdVariants = Array.from(
-        new Set(
-          [
-            searchTerm,
-            rawTerm,
-            rawTerm.toUpperCase(),
-            strippedMemberId,
-            strippedMemberId ? `mem-${strippedMemberId}` : "",
-          ].filter(Boolean)
-        )
-      ).slice(0, 10);
+      const memberIdVariants = buildMemberCodeVariants(searchTerm);
 
       if (memberIdVariants.length > 0) {
         queryLookups.push(
-          db.collection("clients").where("memberId", "in", memberIdVariants).limit(10).get()
+          db.collection("clients").where("memberId", "in", memberIdVariants).limit(10).get(),
+          db.collection("clients").where("barcode", "in", memberIdVariants).limit(10).get(),
+          db.collection("clients").where("secondaryBarcodes", "array-contains-any", memberIdVariants).limit(10).get()
         );
       }
       if (/^\d+$/.test(strippedMemberId)) {
@@ -4942,6 +4983,11 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         const data = doc.data();
         const memberId = (data.memberId || doc.id || "").toString().toLowerCase();
         const cleanMemberId = memberId.replace(/^mem-/, "");
+        const barcodeLower = (data.barcode || "").toString().replace(/^#/, "").trim().toLowerCase();
+        const secBarcodesLower = Array.isArray(data.secondaryBarcodes)
+          ? data.secondaryBarcodes.map((b: any) => String(b || "").replace(/^#/, "").trim().toLowerCase())
+          : [];
+        const rawClean = rawTerm.replace(/^#/, "").replace(/^mem-/, "");
         const docPhone = (data.phone || "").toString();
         const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
         const docPhoneDigits = docPhone.replace(/\D/g, "");
@@ -4951,7 +4997,9 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         const matches = 
           memberId === rawTerm ||
           memberId === `mem-${rawTerm}` ||
-          cleanMemberId === rawTerm.replace(/^mem-/, "") ||
+          cleanMemberId === rawClean ||
+          (Boolean(barcodeLower) && barcodeLower === rawClean) ||
+          secBarcodesLower.includes(rawClean) ||
           (Boolean(normalizedPhone) && Boolean(docNormPhone) && docNormPhone === normalizedPhone) ||
           phoneVariants.includes(docPhone) ||
           (Boolean(clean9) && docPhoneDigits.slice(-9) === clean9) ||
@@ -4988,7 +5036,7 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         found: true,
         client: {
           id: matchedDoc.id,
-          memberId: clientData.memberId || matchedDoc.id,
+          memberId: resolvePreferredMemberCode(clientData, matchedDoc.id),
           name: clientData.name || "Member",
           phone: clientData.phone || "",
           email: clientData.email || "",
@@ -5027,10 +5075,7 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
       }
 
       if (!clientDoc && memberId) {
-        const snap = await db.collection("clients").where("memberId", "==", memberId).limit(1).get();
-        if (!snap.empty) {
-          clientDoc = snap.docs[0];
-        }
+        clientDoc = await findClientDocByCodeOrId(db, memberId);
       }
 
       if (!clientDoc || !clientDoc.exists) {

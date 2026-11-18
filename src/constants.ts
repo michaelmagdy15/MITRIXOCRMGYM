@@ -216,6 +216,62 @@ export function getInzanMemberCodeMeta(rawMemberId?: string | number | null): In
   return INZAN_MEMBER_CODE_GROUPS[prefix] || null;
 }
 
+/**
+ * Returns the canonical member code to display in UI / portal / QR pass.
+ * When Inzan RedGITS imports store a letter-prefixed code (e.g. Q1496, C238, P20, O851)
+ * in `barcode` while `memberId` holds the internal `redgitsId` / `cardId` (e.g. 27137),
+ * always prefer the letter-prefixed code so logging in or opening the profile never flips P20 -> 27137.
+ */
+export function getPreferredMemberCode(client: any, _isInzanTenant = false): string {
+  if (!client || typeof client !== 'object') return '';
+  const cleanStr = (val: unknown): string => {
+    if (val === null || val === undefined || typeof val === 'object') return '';
+    const s = String(val).replace(/^#/, '').trim();
+    if (!s || s === 'null' || s === 'undefined' || s.includes('[object Object]') || /^code\s*\(/i.test(s)) {
+      return '';
+    }
+    return s;
+  };
+  const mid = cleanStr(client.memberId);
+  const bc = cleanStr(client.barcode);
+  const rgId = cleanStr(client.redgitsId);
+  const cardId = cleanStr(client.cardId);
+
+  if (bc && /^[qcpo]\s*-?\s*\d+$/i.test(bc)) {
+    if (!mid || mid === rgId || mid === cardId || /^redgits-/i.test(mid)) {
+      return bc.replace(/\s+/g, '').toUpperCase();
+    }
+  }
+  if (mid && /^[qcpo]\s*-?\s*\d+$/i.test(mid)) {
+    return mid.replace(/\s+/g, '').toUpperCase();
+  }
+  return mid || (bc ? (/^[qcpo]/i.test(bc) ? bc.toUpperCase() : bc) : '');
+}
+
+/**
+ * Generates up to 10 case/format variants for Firestore `in` / `array-contains-any` queries
+ * so both `P20`, `p20`, `o993`, `O993`, and `P-20` match indexed fields.
+ */
+export function getMemberCodeSearchVariants(rawTerm: string): string[] {
+  const clean = String(rawTerm || '')
+    .trim()
+    .replace(/^#/, '')
+    .replace(/^mem-/i, '')
+    .trim();
+  if (!clean) return [];
+  const compact = clean.replace(/\s|-/g, '');
+  return Array.from(
+    new Set([
+      clean,
+      clean.toUpperCase(),
+      clean.toLowerCase(),
+      compact,
+      compact.toUpperCase(),
+      compact.toLowerCase(),
+    ].filter(Boolean))
+  ).slice(0, 10);
+}
+
 export function isShortMemberIdSearchTerm(rawQuery?: string | null): boolean {
   if (!rawQuery) return false;
   const clean = rawQuery.trim().replace(/^#/, '').trim();

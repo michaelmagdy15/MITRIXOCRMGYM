@@ -86,7 +86,7 @@ describe('memberProfileLocking', () => {
     });
 
     it('includes required additional fields in EDITABLE_ADDITIONAL_MEMBER_FIELDS', () => {
-      const expectedEditableFields: (keyof Client)[] = [
+      const expectedEditableFields: (keyof Client | string)[] = [
         'backupPhone',
         'email',
         'jobTitle',
@@ -107,6 +107,11 @@ describe('memberProfileLocking', () => {
         'typeOfClient',
         'guestSerial',
         'assignedTo',
+        'assignedCoachId',
+        'assignedCoachName',
+        'trainerName',
+        'coach',
+        'staffAssignments',
       ];
       assert.deepStrictEqual(EDITABLE_ADDITIONAL_MEMBER_FIELDS, expectedEditableFields);
     });

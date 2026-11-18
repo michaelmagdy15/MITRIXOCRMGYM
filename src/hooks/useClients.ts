@@ -144,6 +144,24 @@ function predictGender(clientName: string): 'Male' | 'Female' | null {
   return null;
 }
 
+function normalizeClientSlice(list: Omit<Client, 'comments' | 'interactions'>[]): Client[] {
+  return list
+    .filter(c => !c.isDeleted)
+    .map(c => {
+      const normalized = {
+        ...c,
+        name: c.name != null ? String(c.name) : '',
+        phone: c.phone != null ? String(c.phone) : '',
+        memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
+        leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
+        comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
+        interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
+      };
+      (normalized as any)._lifecycle = computeMemberGlobalStatus(normalized as Partial<Client>);
+      return normalized as Client;
+    });
+}
+
 export const useClients = (currentUser: User | null, searchTerm: string = '') => {
   const { effectiveRole } = useAuth();
   const [membersList, setMembersList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
@@ -152,35 +170,40 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const [searchResults, setSearchResults] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const normalizedMembers = useMemo(() => normalizeClientSlice(membersList), [membersList]);
+  const normalizedExpired = useMemo(() => normalizeClientSlice(expiredMembersList), [expiredMembersList]);
+  const normalizedLeads = useMemo(() => normalizeClientSlice(leadsList), [leadsList]);
+  const normalizedSearch = useMemo(() => normalizeClientSlice(searchResults), [searchResults]);
+
   const clients = useMemo(() => {
-    const activeIds = new Set(membersList.map(c => c.id));
-    const cleanExpired = expiredMembersList.filter(c => !activeIds.has(c.id));
-    
-    const combined = [...membersList, ...cleanExpired, ...leadsList];
-    const existingIds = new Set(combined.map(c => c.id));
-    
-    searchResults.forEach(res => {
-      if (!existingIds.has(res.id)) {
+    const seenIds = new Set<string>();
+    const combined: Client[] = [];
+
+    for (const c of normalizedMembers) {
+      seenIds.add(c.id);
+      combined.push(c);
+    }
+    for (const c of normalizedExpired) {
+      if (!seenIds.has(c.id)) {
+        seenIds.add(c.id);
+        combined.push(c);
+      }
+    }
+    for (const c of normalizedLeads) {
+      if (!seenIds.has(c.id)) {
+        seenIds.add(c.id);
+        combined.push(c);
+      }
+    }
+    for (const res of normalizedSearch) {
+      if (!seenIds.has(res.id)) {
+        seenIds.add(res.id);
         combined.push(res);
       }
-    });
+    }
 
-    return combined
-      .filter(c => !c.isDeleted)
-      .map(c => {
-        const normalized = {
-          ...c,
-          name: c.name != null ? String(c.name) : '',
-          phone: c.phone != null ? String(c.phone) : '',
-          memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
-          leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
-          comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
-          interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
-        };
-        (normalized as any)._lifecycle = computeMemberGlobalStatus(normalized as Partial<Client>);
-        return normalized;
-      }) as Client[];
-  }, [membersList, expiredMembersList, leadsList, searchResults]);
+    return combined;
+  }, [normalizedMembers, normalizedExpired, normalizedLeads, normalizedSearch]);
 
   const baseClients = clients;
 
@@ -256,10 +279,33 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     if (expiredLoaded || loadingExpired) return;
     setLoadingExpired(true);
     try {
-      const q = query(
-        collection(db, 'clients'),
-        where('status', 'in', ['Expired', 'expired'])
-      );
+      const tenantId = getTenantId();
+      const isInzanTenant = tenantId.toLowerCase().includes('inzan');
+
+      // Check local IndexedDB cache first for expired members (0 Firestore reads)
+      if (tenantId) {
+        try {
+          const ldb = await getLocalDb(tenantId);
+          const cachedAll = await ldb.getAll('members');
+          const cachedExpired = (cachedAll || []).filter(
+            (m: any) => String(m?.status || '').toLowerCase() === 'expired'
+          );
+          if (cachedExpired.length >= 25) {
+            setExpiredMembersList(cachedExpired as any);
+            setExpiredLoaded(true);
+            setLoadingExpired(false);
+            return;
+          }
+        } catch {
+          // ignore local IndexedDB cache errors
+        }
+      }
+
+      // Cap Inzan expired batch to 250 docs to stay well inside Spark 50k reads/day quota
+      // (specific ID/phone/barcode searches still query Firestore directly on demand).
+      const q = isInzanTenant
+        ? query(collection(db, 'clients'), where('status', 'in', ['Expired', 'expired']), limit(250))
+        : query(collection(db, 'clients'), where('status', 'in', ['Expired', 'expired']));
       const snap = await getDocs(q);
       const fetchedExpired = snap.docs.map(
         (d) => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>)
@@ -267,7 +313,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       setExpiredMembersList(fetchedExpired);
       setExpiredLoaded(true);
 
-      const tenantId = getTenantId();
       if (tenantId && fetchedExpired.length > 0) {
         saveMembers(tenantId, fetchedExpired).catch((err) => {
           console.warn('[useClients] Background saveMembers (expired) failed:', err);

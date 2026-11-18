@@ -188,12 +188,6 @@ export default function Payments() {
   const [paymentBranch, setPaymentBranch] = useState('');
 
   useEffect(() => {
-    if (!isNewPaymentOpen && !historicalPaymentsLoaded && !loadingHistoricalPayments && fetchHistoricalPayments) {
-      fetchHistoricalPayments();
-    }
-  }, [isNewPaymentOpen, historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
-
-  useEffect(() => {
     if (!pendingNewPhone) return;
     const found = clients.find(c => c.phone === pendingNewPhone || matchesPhoneSearch(c.phone, pendingNewPhone));
     if (found) {
@@ -230,40 +224,27 @@ export default function Payments() {
   const [discountedAmount, setDiscountedAmount] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [paymentCategory, setPaymentCategory] = useState<PaymentCategory>('Memberships');
-  const [packageCategoryFilter, setPackageCategoryFilter] = useState<'All' | 'Membership' | 'PT' | 'Classes' | 'SGF' | 'Nutrition'>('All');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [isMemberOnHold, setIsMemberOnHold] = useState(false);
 
-  const modalFilteredPackages = React.useMemo(() => {
-    if (packageCategoryFilter === 'All') return visiblePackages;
+  // Load older payments only on demand (e.g. filtering before 30d window or clicking "Load Historical Payments")
+  useEffect(() => {
+    if (!filterDateFrom || historicalPaymentsLoaded || loadingHistoricalPayments || !fetchHistoricalPayments) return;
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (filterDateFrom < thirtyDaysAgoStr) {
+      fetchHistoricalPayments();
+    }
+  }, [filterDateFrom, historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
+
+  const uniqueUpgradePackages = React.useMemo(() => {
+    const seen = new Set<string>();
     return visiblePackages.filter((pkg) => {
-      const cat = (pkg.category || '').toLowerCase();
-      const name = (pkg.name || '').toLowerCase();
-      const type = (pkg.type || '').toLowerCase();
-      const resolved = resolvePaymentCategory(pkg.name);
-      switch (packageCategoryFilter) {
-        case 'PT':
-          return cat === 'pt' || cat.includes('private') || type === 'private' || resolved === 'PT' || name.includes('pt');
-        case 'Classes':
-          return cat.includes('class') || resolved === 'Classes' || name.includes('class');
-        case 'SGF':
-          return cat.includes('sgf') || name.includes('sgf') || name.includes('small group');
-        case 'Nutrition':
-          return cat.includes('nutrition') || name.includes('nutrition') || pkg.targetTeam === 'Nutrition';
-        case 'Membership':
-          return (
-            cat.includes('membership') ||
-            (resolved === 'Memberships' &&
-              !cat.includes('sgf') &&
-              !name.includes('sgf') &&
-              !cat.includes('nutrition') &&
-              !name.includes('nutrition'))
-          );
-        default:
-          return true;
-      }
+      const k = (pkg.name || '').trim();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
     });
-  }, [visiblePackages, packageCategoryFilter]);
+  }, [visiblePackages]);
 
   // Hold feature state
   const [isHoldDialogOpen, setIsHoldDialogOpen] = useState(false);
@@ -795,7 +776,6 @@ export default function Payments() {
       setDiscountedAmount('');
       setAmountPaid('');
       setPaymentCategory('Memberships');
-      setPackageCategoryFilter('All');
       setReceiptNumber('');
       setIsMemberOnHold(false);
       setDiscountReason('Standard');
@@ -2518,43 +2498,12 @@ export default function Payments() {
             </div>
 
             <div className="col-span-full space-y-3">
-              {isInzan && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">
-                  Filter Packages by Category
-                </Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {(['All', 'Membership', 'PT', 'Classes', 'SGF', 'Nutrition'] as const).map((pill) => {
-                    const isSelected = packageCategoryFilter === pill;
-                    return (
-                      <button
-                        key={pill}
-                        type="button"
-                        onClick={() => {
-                          setPackageCategoryFilter(pill);
-                          if (pill === 'PT') setPaymentCategory('PT');
-                          else if (pill === 'Classes' || pill === 'SGF') setPaymentCategory('Classes');
-                          else if (pill === 'Membership') setPaymentCategory('Memberships');
-                        }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                            : 'bg-background/60 text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground'
-                        }`}
-                      >
-                        {pill}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              )}
               {(() => {
                 const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
                 return (
                   <>
                     <CascadingPackageSelector
-                      packages={modalFilteredPackages}
+                      packages={visiblePackages}
                       selectedPackageName={packageType}
                       initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
                       initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
@@ -2944,6 +2893,19 @@ export default function Payments() {
                   </span>
                 )}
               </Button>
+
+              {!historicalPaymentsLoaded && fetchHistoricalPayments && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingHistoricalPayments}
+                  className="h-10 px-3 text-xs font-semibold shrink-0"
+                  onClick={() => fetchHistoricalPayments()}
+                >
+                  {loadingHistoricalPayments ? 'Loading Older...' : 'Load Older Payments'}
+                </Button>
+              )}
             </div>
 
             {(showAdvancedFilters || activeAdvCount > 0) && (
@@ -3511,9 +3473,9 @@ export default function Payments() {
                                         <SelectValue placeholder={t('payments.upgrade.select_package')} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {visiblePackages.map(pkg => (
+                                        {uniqueUpgradePackages.map(pkg => (
                                           <SelectItem key={pkg.id} value={pkg.name}>
-                                            {pkg.name} ({pkg.price} {t('payments.currency_le')})
+                                            {isInzan ? pkg.name : `${pkg.name} (${pkg.price} ${t('payments.currency_le')})`}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

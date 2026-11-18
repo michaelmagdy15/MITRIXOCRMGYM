@@ -6,6 +6,8 @@ import {
   isAssignableSalesUser,
   toCanonical,
   getInzanMemberCodeMeta,
+  getPreferredMemberCode,
+  getMemberCodeSearchVariants,
   isShortMemberIdSearchTerm,
   INZAN_MEMBER_CODE_GROUPS,
   InzanMemberCodePrefix,
@@ -201,6 +203,15 @@ export default function Clients() {
       return active && (features?.ptPackages !== false || p.type !== 'Private');
     });
   }, [packages, features]);
+  const dedupedVisiblePackages = React.useMemo(() => {
+    const seen = new Set<string>();
+    return visiblePackages.filter(p => {
+      const k = (p.name || '').trim();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [visiblePackages]);
   const [fetchedFallbackClient, setFetchedFallbackClient] = useState<Client | null>(null);
 
   const rawActiveClient = React.useMemo(() => {
@@ -251,7 +262,6 @@ export default function Clients() {
     );
     if (alreadyInMemory) return;
 
-    fetchExpiredMembers();
     let cancelled = false;
     (async () => {
       try {
@@ -261,7 +271,7 @@ export default function Clients() {
           setFetchedFallbackClient({ id: directSnap.id, ...(directSnap.data() as any) } as Client);
           return;
         }
-        // 2. If numeric or prefixed memberId, try redgits-{id} or query by memberId
+        // 2. If numeric or prefixed memberId, try redgits-{id} or indexed memberId / barcode lookup
         if (/^\d+$/.test(cleanTarget)) {
           const rgSnap = await getDoc(doc(db, 'clients', `redgits-${cleanTarget}`));
           if (!cancelled && rgSnap.exists()) {
@@ -272,10 +282,21 @@ export default function Clients() {
             }
           }
         }
-        const qSnap = await getDocs(query(collection(db, 'clients'), where('memberId', '==', cleanTarget), limit(1)));
+        const variants = getMemberCodeSearchVariants(cleanTarget);
+        const qSnap = await getDocs(
+          query(collection(db, 'clients'), where('memberId', 'in', variants.length > 0 ? variants : [cleanTarget]), limit(1))
+        );
         if (!cancelled && !qSnap.empty) {
           const d = qSnap.docs[0]!;
           setFetchedFallbackClient({ id: d.id, ...(d.data() as any) } as Client);
+          return;
+        }
+        if (variants.length > 0) {
+          const bcSnap = await getDocs(query(collection(db, 'clients'), where('barcode', 'in', variants), limit(1)));
+          if (!cancelled && !bcSnap.empty) {
+            const d = bcSnap.docs[0]!;
+            setFetchedFallbackClient({ id: d.id, ...(d.data() as any) } as Client);
+          }
         }
       } catch (err) {
         console.error('Fallback activeClient lookup failed:', err);
@@ -284,7 +305,7 @@ export default function Clients() {
     return () => {
       cancelled = true;
     };
-  }, [activeClientId, allClients, clients, fetchExpiredMembers]);
+  }, [activeClientId, allClients, clients]);
   const activeClient = React.useMemo(() => {
     if (!rawActiveClient) return null;
     const mergedIntoId = (rawActiveClient as any).mergedInto;
@@ -667,10 +688,10 @@ export default function Clients() {
   }, [activeClientId]);
 
   React.useEffect(() => {
-    if (activeTab === 'expired' || searchTerm.trim().length >= 1 || idSearchTerm.trim().length >= 1 || searchQuery.trim().length >= 1) {
+    if (activeTab === 'expired') {
       fetchExpiredMembers();
     }
-  }, [activeTab, searchTerm, idSearchTerm, searchQuery, fetchExpiredMembers]);
+  }, [activeTab, fetchExpiredMembers]);
 
   const buildPackageWithCorporateDeal = (basePkg: any, corporateId?: string) => {
     if (!basePkg || !corporateId) return basePkg;
@@ -2676,9 +2697,13 @@ export default function Clients() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {getSafeCleanMemberId(client.memberId || client.barcode) && <span className="text-[10px] font-bold text-muted-foreground">#{getSafeCleanMemberId(client.memberId || client.barcode)}</span>}
+                  {getPreferredMemberCode(client, isInzanTenant) && (
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      #{getPreferredMemberCode(client, isInzanTenant)}
+                    </span>
+                  )}
                   {(() => {
-                    const codeMeta = getInzanMemberCodeMeta(client.memberId || client.barcode);
+                    const codeMeta = getInzanMemberCodeMeta(getPreferredMemberCode(client, isInzanTenant) || client.barcode);
                     if (!codeMeta) return null;
                     return (
                       <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
@@ -2799,17 +2824,26 @@ export default function Clients() {
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {getSafeCleanMemberId(client.memberId || client.barcode) ? (
-                      <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                        #{getSafeCleanMemberId(client.memberId || client.barcode)}
-                      </span>
-                    ) : (client.leadId || client.redgitsId) ? (
-                      <span className="font-mono text-[10px] font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                        Lead #{client.leadId || client.redgitsId}
-                      </span>
-                    ) : null}
                     {(() => {
-                      const codeMeta = getInzanMemberCodeMeta(client.memberId || client.barcode);
+                      const prefCode = getPreferredMemberCode(client, isInzanTenant);
+                      if (prefCode) {
+                        return (
+                          <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                            #{prefCode}
+                          </span>
+                        );
+                      }
+                      if (client.leadId || client.redgitsId) {
+                        return (
+                          <span className="font-mono text-[10px] font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                            Lead #{client.leadId || client.redgitsId}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {(() => {
+                      const codeMeta = getInzanMemberCodeMeta(getPreferredMemberCode(client, isInzanTenant) || client.barcode);
                       if (!codeMeta) return null;
                       return (
                         <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
@@ -3300,9 +3334,9 @@ export default function Clients() {
                             <SelectValue placeholder="Select package..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {visiblePackages.map(p => (
+                            {dedupedVisiblePackages.map(p => (
                               <SelectItem key={p.id} value={p.name}>
-                                {p.name} ({p.price.toLocaleString()} LE)
+                                {isInzanTenant ? p.name : `${p.name} (${p.price.toLocaleString()} LE)`}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -3816,11 +3850,11 @@ export default function Clients() {
                   <SelectValue placeholder="Choose a package" />
                 </SelectTrigger>
                 <SelectContent>
-                  {visiblePackages
+                  {dedupedVisiblePackages
                     .filter((p) => !bulkPkgSearch.trim() || `${p.name} ${p.category || ''} ${p.type || ''} ${p.price || ''}`.toLowerCase().includes(bulkPkgSearch.trim().toLowerCase()))
                     .map((p) => (
                       <SelectItem key={p.id} value={p.name} className="text-xs">
-                        {p.name} ({p.price.toLocaleString()} LE)
+                        {isInzanTenant ? p.name : `${p.name} (${p.price.toLocaleString()} LE)`}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -4753,12 +4787,12 @@ export default function Clients() {
                                 <CheckCircle className="h-3.5 w-3.5" /> Portal Active
                               </p>
                               <p className="text-[10px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy login info">
-                                (Login ID: #{activeClient.memberId || activeClient.id} · Default Pass: 12345678)
+                                (Login ID: #{getPreferredMemberCode(activeClient, isInzanTenant) || activeClient.id} · Default Pass: 12345678)
                               </p>
                             </div>
                           ) : (
                             <p className="text-xs text-muted-foreground">
-                              No portal access enabled yet (Login ID: #{activeClient.memberId || activeClient.id} · Default Pass: 12345678).
+                              No portal access enabled yet (Login ID: #{getPreferredMemberCode(activeClient, isInzanTenant) || activeClient.id} · Default Pass: 12345678).
                             </p>
                           )}
                         </div>
@@ -4771,7 +4805,7 @@ export default function Clients() {
                               className="text-xs font-bold text-primary border-primary/20 hover:border-primary/40"
                               disabled={isActivatingPortal === activeClient.id || isResettingPortalPassword === activeClient.id}
                               onClick={async () => {
-                                const effMemberId = String(activeClient.memberId || activeClient.id).replace(/^#/, '');
+                                const effMemberId = getPreferredMemberCode(activeClient, isInzanTenant) || activeClient.id;
                                 setIsActivatingPortal(activeClient.id);
                                 try {
                                   await createClientAccount(activeClient.id, effMemberId, activeClient.name, activeClient.phone);
@@ -4792,7 +4826,7 @@ export default function Clients() {
                             className="text-xs font-bold text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 gap-1"
                             disabled={isResettingPortalPassword === activeClient.id || isActivatingPortal === activeClient.id}
                             onClick={async () => {
-                              const effMemberId = String(activeClient.memberId || activeClient.id).replace(/^#/, '');
+                              const effMemberId = getPreferredMemberCode(activeClient, isInzanTenant) || activeClient.id;
                               setIsResettingPortalPassword(activeClient.id);
                               try {
                                 await resetClientPortalPassword(
@@ -4994,9 +5028,9 @@ export default function Clients() {
                                           <SelectValue placeholder="Change Primary Package..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          {visiblePackages.map((p) => (
+                                          {dedupedVisiblePackages.map((p) => (
                                             <SelectItem key={p.id} value={p.name} className="text-xs">
-                                              {p.name} ({p.price.toLocaleString()} LE)
+                                              {isInzanTenant ? p.name : `${p.name} (${p.price.toLocaleString()} LE)`}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>
@@ -5396,11 +5430,11 @@ export default function Clients() {
                                   <SelectValue placeholder="Select package" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {visiblePackages
+                                  {dedupedVisiblePackages
                                     .filter((p) => !pkgSelectSearch.trim() || `${p.name} ${p.category || ''} ${p.type || ''} ${p.price || ''}`.toLowerCase().includes(pkgSelectSearch.trim().toLowerCase()))
                                     .map((p) => (
                                       <SelectItem key={p.id} value={p.name} className="text-xs">
-                                        {p.name} ({p.price.toLocaleString()} LE)
+                                        {isInzanTenant ? p.name : `${p.name} (${p.price.toLocaleString()} LE)`}
                                       </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -7032,7 +7066,7 @@ export default function Clients() {
                       <SelectValue placeholder="Select package" />
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
-                      {visiblePackages
+                      {dedupedVisiblePackages
                         .filter(p => {
                           if (!isInzanTenant) return true;
                           const effH = getEffectivePackageHierarchy(p);
@@ -7047,7 +7081,7 @@ export default function Clients() {
                           const effCat = getEffectivePackageCategory(p);
                           return (
                             <SelectItem key={p.id} value={p.name}>
-                              [{effH}] [{effCat}] {p.name} ({p.price.toLocaleString()} LE)
+                              {isInzanTenant ? `[${effH}] [${effCat}] ${p.name}` : `[${effH}] [${effCat}] ${p.name} (${p.price.toLocaleString()} LE)`}
                             </SelectItem>
                           );
                         })}
@@ -7634,7 +7668,7 @@ export default function Clients() {
                       <SelectValue placeholder="Select package" />
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
-                      {visiblePackages
+                      {dedupedVisiblePackages
                         .filter(p => {
                           if (!isInzanTenant) return true;
                           const effH = getEffectivePackageHierarchy(p);
@@ -7649,7 +7683,7 @@ export default function Clients() {
                           const effCat = getEffectivePackageCategory(p);
                           return (
                             <SelectItem key={p.id} value={p.name}>
-                              [{effH}] [{effCat}] {p.name} ({p.price.toLocaleString()} LE)
+                              {isInzanTenant ? `[${effH}] [${effCat}] ${p.name}` : `[${effH}] [${effCat}] ${p.name} (${p.price.toLocaleString()} LE)`}
                             </SelectItem>
                           );
                         })}
@@ -7939,9 +7973,9 @@ export default function Clients() {
                       <p className="font-bold text-sm text-foreground group-hover:text-pink-600 dark:group-hover:text-pink-400 group-hover:underline truncate">
                         {client.name}
                       </p>
-                      {client.memberId && (
+                      {getPreferredMemberCode(client, isInzanTenant) && (
                         <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 h-4 shrink-0">
-                          #{String(client.memberId).replace(/^#/, '')}
+                          #{getPreferredMemberCode(client, isInzanTenant)}
                         </Badge>
                       )}
                     </div>

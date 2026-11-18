@@ -2995,21 +2995,25 @@ export default function Leads() {
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
                       {availablePackages.map((pkg: Package) => (
-                        <SelectItem
-                          key={pkg.id}
-                          value={pkg.id}
-                          label={`${pkg.name} — ${pkg.price} EGP (${pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`} · ${pkg.expiryDays}d)`}
-                        >
-                          <div className="flex items-center justify-between w-full gap-4">
-                            <span className="font-semibold">{pkg.name}</span>
-                            <div className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className="text-[10px]">{pkg.type || 'Standard'}</Badge>
-                              <span className="font-bold text-emerald-600">{pkg.price} EGP</span>
-                              <span className="text-muted-foreground">· {pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`}</span>
-                              <span className="text-muted-foreground">· {pkg.expiryDays}d</span>
+                          <SelectItem
+                            key={pkg.id}
+                            value={pkg.id}
+                            label={
+                              isInzan
+                                ? `${pkg.name} (${pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`} · ${pkg.expiryDays}d)`
+                                : `${pkg.name} — ${pkg.price} EGP (${pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`} · ${pkg.expiryDays}d)`
+                            }
+                          >
+                            <div className="flex items-center justify-between w-full gap-4">
+                              <span className="font-semibold">{pkg.name}</span>
+                              <div className="flex items-center gap-2 text-xs">
+                                <Badge variant="outline" className="text-[10px]">{pkg.type || 'Standard'}</Badge>
+                                {!isInzan && <span className="font-bold text-emerald-600">{pkg.price} EGP</span>}
+                                <span className="text-muted-foreground">· {pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`}</span>
+                                <span className="text-muted-foreground">· {pkg.expiryDays}d</span>
+                              </div>
                             </div>
-                          </div>
-                        </SelectItem>
+                          </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

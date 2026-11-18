@@ -25,6 +25,7 @@ import { EmptyState } from './components/EmptyState';
 import { Skeleton, SkeletonCard } from './components/Skeleton';
 import { MemberAccountLinkCard } from './components/MemberAccountLinkCard';
 import { MemberBenefitsWallet } from '../components/member/MemberBenefitsWallet';
+import { getPreferredMemberCode } from '../constants';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -534,7 +535,8 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
     );
   }
 
-  const memberQrValue = client.memberId || client.id;
+  const displayMemberCode = getPreferredMemberCode(client);
+  const memberQrValue = displayMemberCode || client.id;
   const normalizedStatus = String(client.status || '').toUpperCase();
   const isPendingOnboarding = normalizedStatus === 'PENDING_ONBOARDING';
 
@@ -558,7 +560,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-2xl border border-border/70 bg-background/80 p-3">
                 <p className="text-[10px] uppercase font-bold text-muted-foreground">Member ID</p>
-                <p className="font-mono text-lg font-black text-foreground">{client.memberId ? `#${client.memberId}` : 'Pending'}</p>
+                <p className="font-mono text-lg font-black text-foreground">{displayMemberCode ? `#${displayMemberCode}` : 'Pending'}</p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/80 p-3">
                 <p className="text-[10px] uppercase font-bold text-muted-foreground">Status</p>
@@ -706,8 +708,8 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
                     <User className="h-3 w-3" />
                     <span>{member!.name}</span>
                     <span className="text-[10px] opacity-80">{getClientTierBadge(member)}</span>
-                    {member!.memberId && (
-                      <span className="text-[10px] opacity-75">#{member!.memberId}</span>
+                    {getPreferredMemberCode(member) && (
+                      <span className="text-[10px] opacity-75">#{getPreferredMemberCode(member)}</span>
                     )}
                   </button>
                 );
@@ -1156,7 +1158,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
               </div>
             </div>
             <span className="font-mono text-xl sm:text-2xl font-black text-white leading-none shrink-0 tracking-normal">
-              {client.memberId ? `#${client.memberId}` : 'MEMBER'}
+              {displayMemberCode ? `#${displayMemberCode}` : 'MEMBER'}
             </span>
           </div>
         </div>
@@ -1218,7 +1220,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
                       />
                     </div>
                     <p className="font-mono text-lg font-black text-foreground bg-muted py-1 px-3 rounded-lg inline-block">
-                      {client.memberId ? `#${client.memberId}` : client.name}
+                      {displayMemberCode ? `#${displayMemberCode}` : client.name}
                     </p>
                   </div>
                 </DialogContent>
@@ -1569,7 +1571,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
                 <span>Your App Login Details:</span>
               </p>
               <div className="bg-background/80 p-2.5 rounded-xl border border-border/60 font-mono text-[11px] space-y-1">
-                <p><span className="text-muted-foreground">Member ID:</span> <strong className="text-foreground">#{client.memberId || client.id}</strong></p>
+                <p><span className="text-muted-foreground">Member ID:</span> <strong className="text-foreground">#{displayMemberCode || client.id}</strong></p>
                 <p><span className="text-muted-foreground">Phone:</span> <strong className="text-foreground">{client.phone || 'On file'}</strong></p>
                 <p><span className="text-muted-foreground">Default Password:</span> <strong className="text-primary">12345678</strong></p>
               </div>

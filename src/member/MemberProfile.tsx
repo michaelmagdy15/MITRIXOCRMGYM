@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { db, storage, auth, getTenantId } from '../firebase';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch, limit } from 'firebase/firestore';
+import { getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2, Bell, Dumbbell, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
@@ -345,16 +346,22 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
 
     try {
       // 1. Check if trying to link self
-      if (client.memberId === linkMemberId.trim()) {
+      const selfCode = getPreferredMemberCode(client).toLowerCase();
+      const targetTrimmed = linkMemberId.trim().replace(/^#/, '');
+      if (client.memberId === targetTrimmed || (selfCode && selfCode === targetTrimmed.toLowerCase())) {
         throw new Error("You cannot link your own profile.");
       }
 
-      // 2. Query target client
-      const q = query(
-        collection(db, 'clients'),
-        where('memberId', '==', linkMemberId.trim())
+      // 2. Query target client (supports both numeric memberId and Inzan letter codes Q/C/P/O)
+      const variants = getMemberCodeSearchVariants(targetTrimmed);
+      let querySnapshot = await getDocs(
+        query(collection(db, 'clients'), where('memberId', 'in', variants.length > 0 ? variants : [targetTrimmed]), limit(1))
       );
-      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty && variants.length > 0) {
+        querySnapshot = await getDocs(
+          query(collection(db, 'clients'), where('barcode', 'in', variants), limit(1))
+        );
+      }
       if (querySnapshot.empty || !querySnapshot.docs[0]) {
         throw new Error("No client found with this Member ID.");
       }
@@ -458,7 +465,7 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-extrabold tracking-tight truncate uppercase">{client?.name || 'MEMBER'}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{client?.memberId || client?.barcode || 'N/A'}</Badge>
+              <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{getPreferredMemberCode(client) || 'N/A'}</Badge>
               <Badge className={`text-[9px] ${client?.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50'}`}>
                 {client?.status || 'Unknown'}
               </Badge>

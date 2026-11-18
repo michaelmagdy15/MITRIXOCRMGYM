@@ -25,10 +25,10 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
   const historicalLoadPromiseRef = useRef<Promise<void> | null>(null);
   const { effectiveRole } = useAuth();
 
-  const ninetyDaysAgoIso = useMemo(
-    () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    []
-  );
+  const recentWindowStartIso = useMemo(() => {
+    const days = isTenantInzan() ? 30 : 90;
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }, []);
 
   useEffect(() => {
     if (!currentUser || effectiveRole === 'coach' || effectiveRole === 'client') {
@@ -39,11 +39,11 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       return;
     }
 
-    // Scope real-time listener to the last 90 days to save memory and Firestore read quota;
-    // older payments are loaded on-demand via fetchHistoricalPayments().
+    // Scope real-time listener (30d for Inzan Spark quota safety, 90d otherwise);
+    // older payments are loaded only when requested via fetchHistoricalPayments().
     const recentPaymentsQuery = query(
       collection(db, 'payments'),
-      where('date', '>=', ninetyDaysAgoIso)
+      where('date', '>=', recentWindowStartIso)
     );
 
     const unsub = onSnapshot(recentPaymentsQuery, (snapshot) => {
@@ -58,7 +58,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser?.id, currentUser?.role, effectiveRole, ninetyDaysAgoIso]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, recentWindowStartIso]);
 
   const fetchHistoricalPayments = useCallback(async () => {
     if (!currentUser || effectiveRole === 'coach' || effectiveRole === 'client') return;
@@ -70,7 +70,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       try {
         const olderQuery = query(
           collection(db, 'payments'),
-          where('date', '<', ninetyDaysAgoIso)
+          where('date', '<', recentWindowStartIso)
         );
         const snap = await getDocs(olderQuery);
         let docsList = snap.docs
@@ -97,7 +97,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
 
     historicalLoadPromiseRef.current = loadPromise;
     return loadPromise;
-  }, [currentUser, effectiveRole, historicalPaymentsLoaded, ninetyDaysAgoIso, recentPayments.length]);
+  }, [currentUser, effectiveRole, historicalPaymentsLoaded, recentWindowStartIso, recentPayments.length]);
 
   const payments = useMemo(() => {
     if (historicalPayments.length === 0) return recentPayments;

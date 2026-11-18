@@ -195,6 +195,17 @@ function AppContent() {
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const [visitedCoreTabs, setVisitedCoreTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
+  React.useEffect(() => {
+    if (['dashboard', 'clients', 'attendance', 'payments', 'leads'].includes(activeTab)) {
+      setVisitedCoreTabs(prev => {
+        if (prev.has(activeTab)) return prev;
+        const next = new Set(prev);
+        next.add(activeTab);
+        return next;
+      });
+    }
+  }, [activeTab]);
   const [localSearchInput, setLocalSearchInput] = React.useState(searchQuery);
   const isLocalSearchDirtyRef = React.useRef(false);
 
@@ -1576,21 +1587,33 @@ function AppContent() {
               <NotificationsPage />
             </TabsContent>
 
-            <TabsContent value="dashboard" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+            <TabsContent
+              value="dashboard"
+              keepMounted={visitedCoreTabs.has('dashboard')}
+              className={activeTab === 'dashboard' ? 'm-0 focus-visible:outline-none' : 'hidden'}
+            >
               <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Dashboard />
               </React.Suspense>
             </TabsContent>
 
             {(currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin') && (
-              <TabsContent value="leads" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <TabsContent
+                value="leads"
+                keepMounted={visitedCoreTabs.has('leads')}
+                className={activeTab === 'leads' ? 'm-0 focus-visible:outline-none' : 'hidden'}
+              >
                 <React.Suspense fallback={<ModuleLoadingFallback />}>
                   <Leads />
                 </React.Suspense>
               </TabsContent>
             )}
 
-            <TabsContent value="clients" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+            <TabsContent
+              value="clients"
+              keepMounted={visitedCoreTabs.has('clients')}
+              className={activeTab === 'clients' ? 'm-0 focus-visible:outline-none' : 'hidden'}
+            >
               <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Clients />
               </React.Suspense>
@@ -1665,14 +1688,22 @@ function AppContent() {
             )}
 
             {(canViewGlobalDashboard || canDeletePayments || can('payments.view')) && (
-              <TabsContent value="payments" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <TabsContent
+                value="payments"
+                keepMounted={visitedCoreTabs.has('payments')}
+                className={activeTab === 'payments' ? 'm-0 focus-visible:outline-none' : 'hidden'}
+              >
                 <React.Suspense fallback={<ModuleLoadingFallback />}>
                   <Payments />
                 </React.Suspense>
               </TabsContent>
             )}
 
-            <TabsContent value="attendance" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+            <TabsContent
+              value="attendance"
+              keepMounted={visitedCoreTabs.has('attendance')}
+              className={activeTab === 'attendance' ? 'm-0 focus-visible:outline-none' : 'hidden'}
+            >
               <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Attendance />
               </React.Suspense>

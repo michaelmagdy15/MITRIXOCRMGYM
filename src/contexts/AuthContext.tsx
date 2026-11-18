@@ -27,6 +27,8 @@ import {
 } from 'firebase/firestore';
 import * as userService from '../services/userService';
 import { activatePendingUser as activatePendingUserService } from '../services/userService';
+import { getMemberCodeSearchVariants } from '../constants';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -301,13 +303,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
 
-            if (userData.role === 'client' && userData.clientRecordId) {
+            if (userData.role === 'client' && (userData.clientDocId || userData.clientRecordId)) {
               try {
-                const clientQ = query(collection(db, 'clients'), where('memberId', '==', userData.clientRecordId.trim()));
-                const clientSnap = await getDocs(clientQ);
-                if (!clientSnap.empty && clientSnap.docs[0]) {
-                  const clientDocId = clientSnap.docs[0].id;
-                  const clientData = clientSnap.docs[0].data();
+                let matchedDoc: any = null;
+                if (userData.clientDocId) {
+                  const directSnap = await getDoc(doc(db, 'clients', userData.clientDocId));
+                  if (directSnap.exists()) matchedDoc = directSnap;
+                }
+                if (!matchedDoc && userData.clientRecordId) {
+                  const codeVariants = getMemberCodeSearchVariants(String(userData.clientRecordId));
+                  if (codeVariants.length > 0) {
+                    const clientSnap = await getDocs(query(collection(db, 'clients'), where('memberId', 'in', codeVariants), limit(1)));
+                    if (!clientSnap.empty && clientSnap.docs[0]) {
+                      matchedDoc = clientSnap.docs[0];
+                    } else {
+                      const barcodeSnap = await getDocs(query(collection(db, 'clients'), where('barcode', 'in', codeVariants), limit(1)));
+                      if (!barcodeSnap.empty && barcodeSnap.docs[0]) matchedDoc = barcodeSnap.docs[0];
+                    }
+                  }
+                }
+                if (matchedDoc) {
+                  const clientDocId = matchedDoc.id;
+                  const clientData = matchedDoc.data();
 
                   // Migrate clientDocId on user doc if missing
                   if (!userData.clientDocId) {
@@ -444,13 +461,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   await batch.commit();
                 }
 
-                // If still client, check clients collection to link member
+                // If still client, check clients collection using indexed phone queries (never scan full collection)
                 if (role === 'client' && !clientRecordId) {
-                  const allClientsSnap = await getDocs(collection(db, 'clients'));
-                  const clientMatch = allClientsSnap.docs.find(d => {
-                    const cPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
-                    return cPhone && cPhone === phoneDigits;
-                  });
+                  let clientMatch: any = null;
+                  const normPhone = normalizeEgyptPhone(firebaseUser.phoneNumber);
+                  if (normPhone) {
+                    const normSnap = await getDocs(query(collection(db, 'clients'), where('normalized_phone', '==', normPhone), limit(1)));
+                    if (!normSnap.empty) clientMatch = normSnap.docs[0];
+                  }
+                  if (!clientMatch) {
+                    const variants = getEgyptPhoneVariants(firebaseUser.phoneNumber).slice(0, 10);
+                    if (variants.length > 0) {
+                      const varSnap = await getDocs(query(collection(db, 'clients'), where('phone', 'in', variants), limit(1)));
+                      if (!varSnap.empty) clientMatch = varSnap.docs[0];
+                    }
+                  }
                   if (clientMatch) {
                     const cData = clientMatch.data();
                     clientRecordId = cData.memberId || clientMatch.id;
@@ -471,13 +496,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const extractedMemberId = memberEmailMatch[1];
                 clientRecordId = extractedMemberId;
                 try {
-                  const clientsSnap = await getDocs(collection(db, 'clients'));
-                  const matchedClient = clientsSnap.docs.find(d => {
-                    const cData = d.data();
-                    return String(cData.memberId || '').toLowerCase() === extractedMemberId.toLowerCase();
-                  });
+                  const idVariants = getMemberCodeSearchVariants(extractedMemberId);
+                  let matchedClient: any = null;
+                  if (idVariants.length > 0) {
+                    const midSnap = await getDocs(query(collection(db, 'clients'), where('memberId', 'in', idVariants), limit(1)));
+                    if (!midSnap.empty) {
+                      matchedClient = midSnap.docs[0];
+                    } else {
+                      const bcSnap = await getDocs(query(collection(db, 'clients'), where('barcode', 'in', idVariants), limit(1)));
+                      if (!bcSnap.empty) matchedClient = bcSnap.docs[0];
+                    }
+                  }
                   if (matchedClient) {
                     clientDocId = matchedClient.id;
+                    clientRecordId = matchedClient.data().memberId || extractedMemberId;
                     if (matchedClient.data().name) initialName = matchedClient.data().name;
                     await updateDoc(doc(db, 'clients', matchedClient.id), { portalUserId: userId });
                   }
@@ -1170,7 +1202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const [usersSnap, clientsSnap, coachesSnap] = await Promise.all([
         getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'clients')),
+        getDocs(query(collection(db, 'clients'), where('status', 'in', ['Active', 'Nearly Expired', 'Hold']))),
         getDocs(collection(db, 'coaches'))
       ]);
 

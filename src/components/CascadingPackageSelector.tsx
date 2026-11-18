@@ -1,15 +1,14 @@
 import { getTenantId } from '../firebase';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Package } from '../types';
 import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory, isPackageMatchingFilter } from '../utils/memberCategories';
 import { getEffectivePackageHierarchy, getEffectivePackageCategory } from '../utils/membershipRules';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Sparkles, Dumbbell, MapPin, Layers, CheckCircle2, UserCheck, ShieldAlert, Search, X, Check, ArrowRight } from 'lucide-react';
+import { Sparkles, Dumbbell, MapPin, Layers, CheckCircle2, UserCheck, ShieldAlert, Search, X, Check, ArrowRight, ChevronDown } from 'lucide-react';
 
 export interface CascadingPackageSelectorProps {
   packages: Package[];
@@ -62,6 +61,19 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
 
   // Instant quick search query across all packages
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const dropdownContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [isDropdownOpen]);
 
   const isNutritionPackage = (pkg: Package) => {
     const n = (pkg.name || '').toLowerCase();
@@ -275,13 +287,28 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
     onBranchChange?.(newBranch);
   };
 
-  const isPackageActive = (pkg: Package) =>
-    pkg.status !== 'Hold' && (pkg.status as string) !== 'Inactive' && pkg.isActive !== false && pkg.is_active !== false && !pkg.archivedAt;
+  const isPackageActive = (pkg: Package) => {
+    const cleanName = (pkg.name || '').trim();
+    if (!cleanName || cleanName.toLowerCase() === 'package code') return false;
+    if (/^\d+$/.test(cleanName) && !pkg.category) return false;
+    return pkg.status !== 'Hold' && (pkg.status as string) !== 'Inactive' && pkg.isActive !== false && pkg.is_active !== false && !pkg.archivedAt;
+  };
 
-  // Filter packages dynamically
+  const activePackagesList = useMemo(() => packages.filter(isPackageActive), [packages]);
+
+  const hierarchyCounts = useMemo(() => {
+    let primary = 0;
+    let secondary = 0;
+    for (const p of activePackagesList) {
+      if (getEffectivePackageHierarchy(p) === 'Primary') primary++;
+      else secondary++;
+    }
+    return { all: activePackagesList.length, primary, secondary };
+  }, [activePackagesList]);
+
+  // Filter packages dynamically using canonical category classification so all 9 Inzan categories filter accurately
   const filteredPackages = useMemo(() => {
-    return packages.filter((pkg) => {
-      if (!isPackageActive(pkg)) return false;
+    return activePackagesList.filter((pkg) => {
       const isPkgPt = isPtPackage(pkg);
 
       if (showCategoryTabs) {
@@ -300,33 +327,35 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
         }
       }
 
+      const effCatLower = showCategoryTabs ? getEffectivePackageCategory(pkg).toLowerCase().trim() : '';
+
       if (packageTypeFilter === 'MEMBERSHIP') {
-        return isMembershipPackage(pkg);
+        return effCatLower ? effCatLower === 'membership' || effCatLower === 'memberships' : isMembershipPackage(pkg);
       }
       if (packageTypeFilter === 'PT') {
-        return isPkgPt;
+        return effCatLower ? effCatLower.includes('personal training') || effCatLower === 'pt' || isPkgPt : isPkgPt;
       }
       if (packageTypeFilter === 'CLASSES') {
-        return isClassesPackage(pkg);
+        return effCatLower ? effCatLower === 'classes' || effCatLower === 'mma' || effCatLower.includes('class') : isClassesPackage(pkg);
       }
       if (packageTypeFilter === 'SGF') {
-        return isSgfPackage(pkg);
+        return effCatLower ? effCatLower === 'sgf' || effCatLower.includes('sgf') : isSgfPackage(pkg);
       }
       if (packageTypeFilter === 'GYMNASTICS') {
-        return isGymnasticsPackage(pkg);
+        return effCatLower ? effCatLower.includes('gymnastic') : isGymnasticsPackage(pkg);
       }
       if (packageTypeFilter === 'NUTRITION') {
-        return isNutritionPackage(pkg);
+        return effCatLower ? effCatLower.includes('nutrition') : isNutritionPackage(pkg);
       }
       if (packageTypeFilter === 'PHYSIO') {
-        return isPhysioPackage(pkg);
+        return effCatLower ? effCatLower.includes('physio') : isPhysioPackage(pkg);
       }
       if (packageTypeFilter === 'DROPIN') {
-        return isDropInPackage(pkg);
+        return effCatLower ? effCatLower === 'complimentary' || effCatLower.includes('drop') : isDropInPackage(pkg);
       }
       return true;
     });
-  }, [packages, category, branch, isPtSelected, hierarchyFilter, packageTypeFilter, showCategoryTabs]);
+  }, [activePackagesList, category, branch, isPtSelected, hierarchyFilter, packageTypeFilter, showCategoryTabs]);
 
   // Currently selected package object
   const activePackage = useMemo(() => {
@@ -552,11 +581,13 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
                       </div>
 
                       <div className="flex items-center gap-2.5 shrink-0">
-                        <div className="text-right">
-                          <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                            {pkg.price.toLocaleString()} LE
-                          </span>
-                        </div>
+                        {!showCategoryTabs && (
+                          <div className="text-right">
+                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                              {pkg.price.toLocaleString()} LE
+                            </span>
+                          </div>
+                        )}
                         <div className={`h-7 w-7 rounded-lg flex items-center justify-center border transition-all ${
                           isSelected
                             ? 'bg-emerald-600 text-white border-emerald-600'
@@ -621,22 +652,19 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
                 <MapPin className="h-3.5 w-3.5 text-primary" />
                 Step 2: Location / Branch
               </Label>
-              <Select
+              <select
                 value={branch}
-                onValueChange={handleBranchChange}
+                onChange={(e) => handleBranchChange(e.target.value)}
                 disabled={readOnlyBranch}
+                aria-label="Select Branch"
+                className="h-10 w-full rounded-xl bg-background/70 border border-border/50 px-3 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <SelectTrigger className="h-10 rounded-xl bg-background/70 border-border/50 text-xs font-semibold">
-                  <SelectValue placeholder="Select Branch" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {branchOptions.map((b) => (
-                    <SelectItem key={b} value={b} className="text-xs font-medium">
-                      {b}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {branchOptions.map((b) => (
+                  <option key={b} value={b} className="bg-background text-foreground">
+                    {b}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {showPtToggle && (
@@ -699,19 +727,19 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
                 {
                   id: 'ALL' as const,
                   label: 'All Packages',
-                  count: packages.filter(isPackageActive).length,
+                  count: hierarchyCounts.all,
                   activeClass: 'bg-primary text-primary-foreground shadow-sm font-bold',
                 },
                 {
                   id: 'Primary' as const,
                   label: 'Primary (Memberships)',
-                  count: packages.filter((p) => isPackageActive(p) && getEffectivePackageHierarchy(p) === 'Primary').length,
+                  count: hierarchyCounts.primary,
                   activeClass: 'bg-emerald-600 text-white shadow-sm font-bold',
                 },
                 {
                   id: 'Secondary' as const,
                   label: 'Secondary (PT / Add-ons)',
-                  count: packages.filter((p) => isPackageActive(p) && getEffectivePackageHierarchy(p) === 'Secondary').length,
+                  count: hierarchyCounts.secondary,
                   activeClass: 'bg-purple-600 text-white shadow-sm font-bold',
                 },
               ]).map((hTab) => {
@@ -806,14 +834,14 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
         </div>
       )}
 
-      {/* Step 3: Dynamic Filtered Package Dropdown */}
-      <div className="space-y-2 pt-1">
+      {/* Step 3: Fast Lightweight Package Listbox (zero Radix Select subtree lag) */}
+      <div className="space-y-2 pt-1" ref={dropdownContainerRef}>
         <div className="flex items-center justify-between">
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
             {isSearching
               ? `Matching Search Packages (${effectiveFilteredPackages.length})`
-              : `Step 3: Matching Price Packages (${effectiveFilteredPackages.length})`}
+              : `Step 3: Select Package (${effectiveFilteredPackages.length})`}
           </Label>
           {effectiveFilteredPackages.length === 0 && (
             <span className="text-[11px] text-amber-500 font-medium">
@@ -822,40 +850,49 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
           )}
         </div>
 
-        <Select
-          value={selectedPackageName || ''}
-          onValueChange={(val) => {
-            if (val === '__custom__') {
-              onPackageSelect(null, isPtSelected);
-              return;
-            }
-            const found = packages.find(p => p.name === val);
-            if (found) {
-              handleDirectSelect(found);
-            } else {
-              onPackageSelect(null, isPtSelected);
-            }
-          }}
-        >
-          <SelectTrigger className="h-12 rounded-xl bg-background border-primary/30 focus:border-primary text-sm font-semibold shadow-inner">
-            <SelectValue placeholder={effectiveFilteredPackages.length > 0 ? "Select package..." : "No matching packages — click for options"} />
-          </SelectTrigger>
-          <SelectContent className="rounded-2xl max-h-[320px]">
-            {effectiveFilteredPackages.length > 0 ? (
-              effectiveFilteredPackages.map((pkg) => {
-                const metaBadges = getPackageMetadataBadges(pkg);
-                return (
-                  <SelectItem key={pkg.id} value={pkg.name} className="py-2.5 px-3 rounded-xl cursor-pointer">
-                    <div className="flex flex-col gap-1 w-full">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen((prev) => !prev)}
+            className="w-full h-12 px-3.5 rounded-xl bg-background border border-primary/30 hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm font-semibold shadow-inner flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
+          >
+            <span className={`truncate ${selectedPackageName ? 'text-foreground' : 'text-muted-foreground font-normal'}`}>
+              {selectedPackageName || (effectiveFilteredPackages.length > 0 ? 'Select package...' : 'No matching packages — click for options')}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isDropdownOpen && (
+            <div className="mt-1.5 rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl max-h-72 overflow-y-auto p-1.5 space-y-1 z-50">
+              {effectiveFilteredPackages.length > 0 ? (
+                effectiveFilteredPackages.map((pkg) => {
+                  const isSelected = selectedPackageName === pkg.name;
+                  const metaBadges = getPackageMetadataBadges(pkg);
+                  return (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      onClick={() => {
+                        handleDirectSelect(pkg);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full text-left py-2.5 px-3 rounded-xl cursor-pointer transition-colors flex flex-col gap-1 ${
+                        isSelected
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
+                          : 'hover:bg-accent/60'
+                      }`}
+                    >
                       <div className="flex items-center justify-between w-full gap-4">
-                        <span className="font-semibold text-xs text-foreground">{pkg.name}</span>
-                        <div className="flex items-center gap-2 text-right">
+                        <span className="font-semibold text-xs text-foreground truncate">{pkg.name}</span>
+                        <div className="flex items-center gap-2 text-right shrink-0">
                           <span className="text-[11px] text-muted-foreground">
                             {pkg.sessions === -1 || pkg.sessions === 0 ? 'Unlimited' : `${pkg.sessions} ses`} • {pkg.expiryDays}d
                           </span>
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            {pkg.price.toLocaleString()} LE
-                          </span>
+                          {!showCategoryTabs && (
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              {pkg.price.toLocaleString()} LE
+                            </span>
+                          )}
                         </div>
                       </div>
                       {metaBadges.length > 0 && (
@@ -870,30 +907,37 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
                           ))}
                         </div>
                       )}
-                    </div>
-                  </SelectItem>
-                );
-              })
-            ) : (
-              <div className="p-3 text-center text-xs text-muted-foreground">
-                {isSearching ? (
-                  <>
-                    <p>No package matches search query "<strong>{searchQuery}</strong>".</p>
-                    <p className="mt-1 text-[11px] text-primary">Try another keyword, or clear search to browse all tiers.</p>
-                  </>
-                ) : (
-                  <>
-                    <p>No package matches <strong>{category}</strong> at <strong>{branch}</strong>.</p>
-                    <p className="mt-1 text-[11px] text-primary">Try changing the Branch or Category, or create a custom package.</p>
-                  </>
-                )}
-              </div>
-            )}
-            <SelectItem value="__custom__" className="py-2 px-3 text-xs italic text-muted-foreground border-t border-border/40 mt-1">
-              + Custom Package Entry...
-            </SelectItem>
-          </SelectContent>
-        </Select>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-3 text-center text-xs text-muted-foreground">
+                  {isSearching ? (
+                    <>
+                      <p>No package matches search query "<strong>{searchQuery}</strong>".</p>
+                      <p className="mt-1 text-[11px] text-primary">Try another keyword, or clear search to browse all tiers.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>No package matches <strong>{category}</strong> at <strong>{branch}</strong>.</p>
+                      <p className="mt-1 text-[11px] text-primary">Try changing the Branch or Category, or create a custom package.</p>
+                    </>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  onPackageSelect(null, isPtSelected);
+                  setIsDropdownOpen(false);
+                }}
+                className="w-full text-left py-2 px-3 rounded-xl text-xs italic text-muted-foreground hover:bg-accent/60 border-t border-border/40 mt-1 cursor-pointer"
+              >
+                + Custom Package Entry...
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Selected Package Confirmation Card */}
@@ -905,17 +949,28 @@ const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps>
               <div>
                 <p className="font-bold text-foreground">{activePackage.name}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Tier: <span className="font-semibold text-foreground">{category}</span> • 
-                  Location: <span className="font-semibold text-foreground">{branch}</span> • 
-                  Valid: <span className="font-semibold text-foreground">{activePackage.expiryDays} Days</span>
+                  {showCategoryTabs ? (
+                    <>
+                      Category: <span className="font-semibold text-foreground">{getEffectivePackageCategory(activePackage)}</span> •{' '}
+                      Valid: <span className="font-semibold text-foreground">{activePackage.expiryDays} Days</span>
+                    </>
+                  ) : (
+                    <>
+                      Tier: <span className="font-semibold text-foreground">{category}</span> •{' '}
+                      Location: <span className="font-semibold text-foreground">{branch}</span> •{' '}
+                      Valid: <span className="font-semibold text-foreground">{activePackage.expiryDays} Days</span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                {activePackage.price.toLocaleString()} LE
-              </span>
-            </div>
+            {!showCategoryTabs && (
+              <div className="text-right">
+                <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                  {activePackage.price.toLocaleString()} LE
+                </span>
+              </div>
+            )}
           </div>
           {getPackageMetadataBadges(activePackage).length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pl-6 pt-1 border-t border-emerald-500/15">

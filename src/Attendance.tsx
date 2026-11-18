@@ -57,7 +57,10 @@ import {
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, getTenantId, auth } from './firebase';
-import { collection, query, onSnapshot, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, where, getDoc, getDocs, limit, onSnapshot, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { getPreferredMemberCode, getMemberCodeSearchVariants, getInzanMemberCodeMeta } from './constants';
+import { searchMembersLocal } from './services/localDb';
+import { getEgyptPhoneVariants } from './utils/phoneUtils';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 import { AttendanceReconciliationModal } from './components/attendance/AttendanceReconciliationModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -147,6 +150,24 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [quickFreezeDays, setQuickFreezeDays] = useState<number>(7);
   const [quickFreezeReason, setQuickFreezeReason] = useState<string>('');
   const [isCheckinActionBusy, setIsCheckinActionBusy] = useState(false);
+  const [showDeskActions, setShowDeskActions] = useState(false);
+  const [lastCheckinDoneBanner, setLastCheckinDoneBanner] = useState<{
+    name: string;
+    code: string;
+    packageName?: string;
+    time: string;
+  } | null>(null);
+  const checkinAutoResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastScannedCodeRef = useRef<{ code: string; ts: number }>({ code: '', ts: 0 });
+  const keepCardOpenRef = useRef(false);
+  useEffect(() => {
+    keepCardOpenRef.current = isQuickFreezeOpen || isGuestInviteOpen;
+  }, [isQuickFreezeOpen, isGuestInviteOpen]);
+  useEffect(() => {
+    return () => {
+      if (checkinAutoResetTimerRef.current) clearTimeout(checkinAutoResetTimerRef.current);
+    };
+  }, []);
   const { t, language, isRtl } = useLanguage();
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -196,7 +217,16 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         const cleanMid = String(c.memberId).replace(/^#/, '').trim();
         if (cleanMid) {
           map.set(cleanMid, c);
+          map.set(cleanMid.toLowerCase(), c);
           map.set(`#${cleanMid}`, c);
+        }
+      }
+      if ((c as any).barcode) {
+        const cleanBc = String((c as any).barcode).replace(/^#/, '').trim();
+        if (cleanBc) {
+          map.set(cleanBc, c);
+          map.set(cleanBc.toLowerCase(), c);
+          map.set(`#${cleanBc}`, c);
         }
       }
       if ((c as any).redgitsId) {
@@ -1254,8 +1284,53 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     }
   };
 
+  const resetInputForNextCheckin = () => {
+    if (manualInputRef.current) {
+      manualInputRef.current.value = '';
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => manualInputRef.current?.focus());
+      } else {
+        manualInputRef.current.focus();
+      }
+    }
+  };
+
+  const clearCurrentCheckinCard = (focusInput = true) => {
+    if (checkinAutoResetTimerRef.current) {
+      clearTimeout(checkinAutoResetTimerRef.current);
+      checkinAutoResetTimerRef.current = null;
+    }
+    setLastScannedMember(null);
+    setGatekeeperEval(null);
+    setTurnstileEval(null);
+    setError(null);
+    setIsQuickFreezeOpen(false);
+    setIsGuestInviteOpen(false);
+    setShowDeskActions(false);
+    if (focusInput) resetInputForNextCheckin();
+  };
+
   const handleScanSuccess = async (decodedId: string) => {
     const isArabic = language === 'ar';
+    const rawTrimmed = String(decodedId || '').trim();
+    if (!rawTrimmed) return;
+
+    // Prevent camera QR frames from re-firing on the same member within 1.5s, while manual back-to-back scans are instant
+    const nowTs = Date.now();
+    if (isScanning && rawTrimmed === lastScannedCodeRef.current.code && nowTs - lastScannedCodeRef.current.ts < 1500) {
+      return;
+    }
+    lastScannedCodeRef.current = { code: rawTrimmed, ts: nowTs };
+
+    // Immediately clear & re-focus input so reception can type/scan the next ID back-to-back without delay
+    if (!isKiosk) {
+      if (checkinAutoResetTimerRef.current) {
+        clearTimeout(checkinAutoResetTimerRef.current);
+        checkinAutoResetTimerRef.current = null;
+      }
+      resetInputForNextCheckin();
+    }
+
     setError(null);
 
     if (isInzan && !isKiosk && isSalesRepOnly(currentUser)) {
@@ -1265,24 +1340,94 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       return;
     }
 
-    const parsedQr = parseUniversalQrCode(decodedId);
+    const parsedQr = parseUniversalQrCode(rawTrimmed);
     const lookupToken = parsedQr.tokenOrMemberId;
     if (!lookupToken) return;
 
     const tokenLower = lookupToken.toLowerCase().trim();
-    const member = clients.find(
-      (c) =>
+    const tokenCompact = tokenLower.replace(/\s|-/g, '');
+    const pool = allClients && allClients.length > 0 ? allClients : clients;
+
+    const matchesClientCode = (c: any) => {
+      const eq = (val: unknown) => {
+        if (val === null || val === undefined) return false;
+        const s = String(val).replace(/^#/, '').toLowerCase().trim();
+        if (!s) return false;
+        return s === tokenLower || s.replace(/\s|-/g, '') === tokenCompact;
+      };
+      return (
         c.id === lookupToken ||
-        (c.memberId && String(c.memberId).toLowerCase().trim() === tokenLower) ||
-        ((c as any).memberCode && String((c as any).memberCode).toLowerCase().trim() === tokenLower) ||
-        ((c as any).redgitsId && String((c as any).redgitsId).toLowerCase().trim() === tokenLower) ||
+        eq(c.memberId) ||
+        eq(c.memberCode) ||
+        eq(c.redgitsId) ||
+        eq(c.barcode) ||
+        eq(c.cardId) ||
         (c.phone && c.phone === lookupToken) ||
-        (c.barcode && String(c.barcode).toLowerCase().trim() === tokenLower) ||
-        (c.cardId && String(c.cardId).toLowerCase().trim() === tokenLower) ||
         (c.guestSerial && c.guestSerial === lookupToken) ||
-        (c.secondaryBarcodes && Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(b => String(b).toLowerCase().trim() === tokenLower)) ||
-        (c.packages && Array.isArray(c.packages) && c.packages.some(p => p.barcode && String(p.barcode).toLowerCase().trim() === tokenLower))
-    );
+        (Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(eq)) ||
+        (Array.isArray(c.packages) && c.packages.some((p: any) => eq(p?.barcode)))
+      );
+    };
+
+    let member: any = pool.find(matchesClientCode);
+
+    // Fallback for letter-prefixed codes (P20, Q..., C..., O...) & Expired/uncached members not yet in memory
+    if (!member) {
+      try {
+        const localMatches = await searchMembersLocal(getTenantId(), lookupToken);
+        if (localMatches && localMatches.length > 0) {
+          member = localMatches.find(matchesClientCode) || localMatches[0];
+        }
+      } catch {}
+    }
+
+    if (!member && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const idVariants = getMemberCodeSearchVariants(lookupToken);
+        const fsQueries: Promise<any>[] = [];
+        if (idVariants.length > 0) {
+          fsQueries.push(
+            getDocs(query(collection(db, 'clients'), where('barcode', 'in', idVariants), limit(2))),
+            getDocs(query(collection(db, 'clients'), where('memberId', 'in', idVariants), limit(2))),
+            getDocs(query(collection(db, 'clients'), where('secondaryBarcodes', 'array-contains-any', idVariants), limit(2)))
+          );
+        }
+        if (/^\d+$/.test(tokenCompact)) {
+          fsQueries.push(getDocs(query(collection(db, 'clients'), where('memberId', '==', Number(tokenCompact)), limit(2))));
+        }
+        if (tokenCompact.replace(/\D/g, '').length >= 8) {
+          const pv = getEgyptPhoneVariants(lookupToken).slice(0, 10);
+          if (pv.length > 0) {
+            fsQueries.push(getDocs(query(collection(db, 'clients'), where('phone', 'in', pv), limit(2))));
+          }
+        }
+        if (fsQueries.length > 0) {
+          const snaps = (await Promise.race([
+            Promise.all(fsQueries),
+            new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500)),
+          ])) as any[];
+          for (const snap of snaps) {
+            if (snap && !snap.empty && snap.docs[0]) {
+              const docData = { id: snap.docs[0].id, ...(snap.docs[0].data() as any) };
+              if (docData.mergedInto) {
+                try {
+                  const targetSnap = await getDoc(doc(db, 'clients', docData.mergedInto));
+                  if (targetSnap.exists()) {
+                    member = { id: targetSnap.id, ...(targetSnap.data() as any) };
+                    break;
+                  }
+                } catch {}
+              }
+              member = docData;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Ignore lookup timeout/offline errors cleanly
+      }
+    }
+
     if (!member) {
       appendWrongEntryLog({
         memberId: lookupToken,
@@ -1386,8 +1531,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
     } else {
       // Front-desk admin checkin flow with 6-stage gatekeeper + Turnstile Bridge rules
+      const displayCode = getPreferredMemberCode(member, isInzan) || member.id;
       setLastScannedMember(member);
-      setIsScanning(false);
+      setShowDeskActions(Boolean(evaluation.isFrozen || lookupMode === 'invitation_id'));
       setError(null);
       setSuccessMessage(null);
       setIsGuestInviteOpen(lookupMode === 'invitation_id');
@@ -1412,16 +1558,34 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         if (turnstileConfig.enabled) {
           triggerTurnstileRelay(turnstileConfig, turnstileAccess, member).catch(() => {});
         }
-        setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
-        toast.success(`Checked in ${member.name} (#${member.memberId || member.id})`);
-        setTimeout(() => {
+        const doneMsg = `Check-in Done ✓ — ${member.name} (#${displayCode})`;
+        setSuccessMessage(doneMsg);
+        setLastCheckinDoneBanner({
+          name: member.name,
+          code: displayCode,
+          packageName: evaluation.activePackages[0]?.packageName || member.packageType || '',
+          time: format(new Date(), 'hh:mm:ss a'),
+        });
+        toast.success(`Check-in Done ✓ ${member.name} (#${displayCode})`);
+        resetInputForNextCheckin();
+
+        // Auto-clear the card cleanly after 2.2s so reception can enter back-to-back IDs seamlessly
+        checkinAutoResetTimerRef.current = setTimeout(() => {
           setSuccessMessage(null);
-        }, 4000);
+          if (!keepCardOpenRef.current) {
+            setLastScannedMember(null);
+            setGatekeeperEval(null);
+            setTurnstileEval(null);
+            setShowDeskActions(false);
+          }
+          resetInputForNextCheckin();
+        }, 2200);
       } catch (err: any) {
         setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
+        resetInputForNextCheckin();
         setTimeout(() => {
           setError(null);
-        }, 5000);
+        }, 4000);
       } finally {
         setIsRecording(false);
       }
@@ -1433,9 +1597,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     handleScanSuccessRef.current = handleScanSuccess;
   }, [handleScanSuccess, clients, selectedBranch, language]);
 
-  // Press "/" anywhere to jump to the manual ID input (skip if already in a field)
+  // Press "/" anywhere to focus ID input, or "Escape" to clear the active check-in card and focus ID input
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearCurrentCheckinCard(true);
+        return;
+      }
       if (e.key !== '/') return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -1624,14 +1792,31 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       if (turnstileConfig.enabled && turnstileEval) {
         triggerTurnstileRelay(turnstileConfig, turnstileEval, lastScannedMember).catch(() => {});
       }
-      setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', lastScannedMember.name));
-      setTimeout(() => {
-        setLastScannedMember(null);
-        setTurnstileEval(null);
+      const displayCode = getPreferredMemberCode(lastScannedMember, isInzan) || lastScannedMember.id;
+      const doneMsg = `Check-in Done ✓ — ${lastScannedMember.name} (#${displayCode})`;
+      setSuccessMessage(doneMsg);
+      setLastCheckinDoneBanner({
+        name: lastScannedMember.name,
+        code: displayCode,
+        packageName: selectedPackageName || lastScannedMember.packageType || '',
+        time: format(new Date(), 'hh:mm:ss a'),
+      });
+      toast.success(doneMsg);
+      resetInputForNextCheckin();
+      if (checkinAutoResetTimerRef.current) clearTimeout(checkinAutoResetTimerRef.current);
+      checkinAutoResetTimerRef.current = setTimeout(() => {
+        if (!keepCardOpenRef.current) {
+          setLastScannedMember(null);
+          setGatekeeperEval(null);
+          setTurnstileEval(null);
+          setShowDeskActions(false);
+        }
         setSuccessMessage(null);
-      }, 3000);
+        resetInputForNextCheckin();
+      }, 2000);
     } catch (err: any) {
       setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
+      resetInputForNextCheckin();
     } finally {
       setIsRecording(false);
     }
@@ -1740,8 +1925,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   };
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto px-1 sm:px-0">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
+    <div className={`${isInzan ? 'space-y-6 sm:space-y-8' : 'space-y-4'} max-w-6xl mx-auto px-1 sm:px-0`}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{isInzan ? 'Check-in Desk' : t('attendance.title')}</h2>
           <p className="text-muted-foreground">{isInzan ? 'Scan member QR code or check in members for workouts and sessions' : t('attendance.subtitle')}</p>
@@ -1840,10 +2025,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start no-print">
-        {/* Scanner & Lookup Section (Ultra-Compact, Zero Empty Camera Box) */}
+      <div className={`grid grid-cols-1 lg:grid-cols-12 items-start no-print ${isInzan ? 'gap-6 lg:gap-8' : 'gap-4 sm:gap-5'}`}>
+        {/* Scanner & Lookup Section */}
         <Card className="lg:col-span-5 overflow-hidden border border-primary/15 shadow-md py-0 gap-0">
-          <div className="bg-primary/5 border-b py-2.5 px-4 flex items-center justify-between gap-2">
+          <div className={`bg-primary/5 border-b flex items-center justify-between gap-2 ${isInzan ? 'py-3.5 px-5' : 'py-2.5 px-4'}`}>
             <span className="flex items-center text-primary text-sm font-bold">
               <Scan className="me-2 h-4 w-4 shrink-0" />
               {t('attendance.live_scanner')}
@@ -1866,10 +2051,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             />
           </div>
 
-          <div className="bg-muted/20 p-3.5 space-y-3">
+          <div className={`bg-muted/20 ${isInzan ? 'p-5 sm:p-6 space-y-5' : 'p-3.5 space-y-3'}`}>
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
             {!isKiosk && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {([
                   { id: 'member_id', label: 'Member ID', icon: User },
                   { id: 'qr_code', label: 'QR / Universal', icon: QrCode },
@@ -1886,7 +2071,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         setLookupMode(mode.id);
                         manualInputRef.current?.focus();
                       }}
-                      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                      className={`flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-[11px] font-bold border transition-all ${
                         active
                           ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                           : 'bg-background text-muted-foreground border-border hover:border-primary/40'
@@ -1900,7 +2085,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               </div>
             )}
 
-            <div className="flex flex-col space-y-2">
+            <div className={`flex flex-col ${isInzan ? 'space-y-3' : 'space-y-2'}`}>
               <Label className="text-xs font-bold uppercase text-muted-foreground ml-1">
                 {lookupMode === 'qr_code'
                   ? 'Scan QR or Universal Cross-Branch Token (UC|host|token)'
@@ -1920,28 +2105,54 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       ? 'Enter Invitation Serial or Guest Phone...'
                       : t('attendance.enter_member_id')
                   }
-                  className="bg-background h-10"
+                  className={`bg-background ${isInzan ? 'h-11 text-base font-mono' : 'h-10'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleScanSuccess(e.currentTarget.value);
                   }}
                 />
                 <Button 
                   variant="secondary" 
-                  className="h-10 px-4 font-bold shrink-0"
-                  onClick={(e) => {
-                    const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                    handleScanSuccess(input.value);
+                  className={`${isInzan ? 'h-11 px-5' : 'h-10 px-4'} font-bold shrink-0`}
+                  onClick={() => {
+                    handleScanSuccess(manualInputRef.current?.value || '');
                   }}
                 >
                   {t('attendance.find_member')}
                 </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground italic ml-1">
-                {t('attendance.hint')}
+              <p className="text-[11px] text-muted-foreground ml-1">
+                {isInzan
+                  ? 'Enter ID (e.g. P20, Q1496, 112) & press Enter — auto-clears for the next check-in. Press Esc to dismiss.'
+                  : t('attendance.hint')}
               </p>
 
-              {/* Large Member Photo & Quick Profile Card Directly Under Manual ID Input */}
-              {!isKiosk && lastScannedMember && (
+              {/* Inzan Rapid Mode: Clean "Check-in Done" status pill without duplicate left-column photo */}
+              {!isKiosk && isInzan && lastCheckinDoneBanner && (
+                <div className="mt-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 truncate">
+                        Check-in Done ✓ — {lastCheckinDoneBanner.name} (#{lastCheckinDoneBanner.code})
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {lastCheckinDoneBanner.time} · Ready for next ID
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLastCheckinDoneBanner(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    title="Dismiss"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Legacy non-Inzan Left Quick Photo Card */}
+              {!isKiosk && !isInzan && lastScannedMember && (
                 <div className="mt-3 pt-3 border-t border-border/70 flex flex-col items-center text-center gap-2.5 bg-background/80 rounded-xl p-3.5 shadow-sm">
                   {(() => {
                     const m = lastScannedMember as any;
@@ -1990,7 +2201,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       <ExternalLink className="h-4 w-4 shrink-0" />
                     </button>
                     <p className="text-xs font-mono font-bold text-muted-foreground">
-                      {lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : lastScannedMember.id}
+                      {getPreferredMemberCode(lastScannedMember, isInzan)
+                        ? `#${getPreferredMemberCode(lastScannedMember, isInzan)}`
+                        : lastScannedMember.id}
                       {lastScannedMember.phone ? ` · ${lastScannedMember.phone}` : ''}
                     </p>
                   </div>
@@ -2001,14 +2214,25 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </Card>
 
         {/* Member Info / Result Section */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className={`lg:col-span-7 ${isInzan ? 'space-y-5' : 'space-y-4'}`}>
           {error && (
-            <div className="bg-red-600 border-2 border-red-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
-              <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide">Gatekeeper Alert</p>
-                <p className="text-sm font-medium text-white/95">{error}</p>
+            <div className="bg-red-600 border-2 border-red-700 text-white p-4 rounded-xl flex items-start justify-between gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-wide">Gatekeeper Alert</p>
+                  <p className="text-sm font-medium text-white/95">{error}</p>
+                </div>
               </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 px-2.5 text-xs font-bold shrink-0"
+                onClick={() => clearCurrentCheckinCard(true)}
+              >
+                Next (Esc)
+              </Button>
             </div>
           )}
 
@@ -2016,28 +2240,39 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             <div className="bg-green-600 border-2 border-green-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
               <CheckCircle className="h-5 w-5 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-bold uppercase tracking-wide">Check-in Recorded</p>
+                <p className="text-sm font-bold uppercase tracking-wide">Check-in Done</p>
                 <p className="text-sm font-medium text-white/95">{successMessage}</p>
               </div>
             </div>
           )}
 
           {lastScannedMember ? (
-            <Card className="border-2 border-green-500/20 shadow-xl animate-in zoom-in-95 duration-200">
-              <CardHeader className="pb-2 space-y-2.5">
+            <Card className={`border-2 border-green-500/20 shadow-xl animate-in zoom-in-95 duration-200 ${isInzan ? 'p-1 sm:p-2' : ''}`}>
+              <CardHeader className={`${isInzan ? 'pb-4 space-y-4' : 'pb-2 space-y-2.5'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <Badge
-                      className={`w-fit mb-1.5 ${
-                        gatekeeperEval && !gatekeeperEval.allowed
-                          ? 'bg-destructive hover:bg-destructive/90'
-                          : 'bg-green-500 hover:bg-green-600'
-                      }`}
-                    >
-                      {gatekeeperEval && !gatekeeperEval.allowed
-                        ? `Blocked: ${gatekeeperEval.denialReasonCode}`
-                        : t('attendance.scan_successful')}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <Badge
+                        className={`w-fit ${
+                          gatekeeperEval && !gatekeeperEval.allowed
+                            ? 'bg-destructive hover:bg-destructive/90'
+                            : 'bg-green-500 hover:bg-green-600'
+                        }`}
+                      >
+                        {gatekeeperEval && !gatekeeperEval.allowed
+                          ? `Blocked: ${gatekeeperEval.denialReasonCode}`
+                          : 'Check-in Done'}
+                      </Badge>
+                      {(() => {
+                        const prefCode = getPreferredMemberCode(lastScannedMember, isInzan);
+                        const meta = getInzanMemberCodeMeta(prefCode);
+                        return prefCode ? (
+                          <Badge variant="outline" className={`font-mono text-xs font-bold ${meta ? meta.badgeClass : ''}`}>
+                            #{prefCode}{meta ? ` · ${meta.prefix}` : ''}
+                          </Badge>
+                        ) : null;
+                      })()}
+                    </div>
                     <CardTitle className="text-2xl">
                       <button
                         type="button"
@@ -2054,19 +2289,32 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     </CardTitle>
                   </div>
                   {!isKiosk && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setActiveTab('clients');
-                        setActiveClientId(lastScannedMember.id);
-                      }}
-                      className="h-8 text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Open Account
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setActiveTab('clients');
+                          setActiveClientId(lastScannedMember.id);
+                        }}
+                        className="h-8 text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Account
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => clearCurrentCheckinCard(true)}
+                        className="h-8 text-xs font-bold text-muted-foreground hover:text-foreground gap-1"
+                        title="Clear card and enter next Member ID (Esc)"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Next (Esc)
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {!isKiosk && (
@@ -2080,13 +2328,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       setActiveTab('clients');
                       setActiveClientId(lastScannedMember.id);
                     }}
-                    size="xl"
+                    size={isInzan ? 'lg' : 'xl'}
                     showMissingAlert={true}
                     staffName={currentUser?.name || currentUser?.email || 'Reception'}
                   />
                 )}
-                {/* Member Portal Status & 1-Click Front Desk Activation + Password Reset */}
-                {!isKiosk && (
+                {/* Member Portal Status & 1-Click Front Desk Activation + Password Reset (non-Inzan check-in view; Inzan lives in Member Account) */}
+                {!isKiosk && !isInzan && (
                   <div className="p-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 flex flex-wrap items-center justify-between gap-2">
                     <div className="space-y-0.5 text-left">
                       <div className="flex items-center gap-2">
@@ -2529,13 +2777,16 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       </div>
 
                       {/* Member Core Details + Package Start & End Dates Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-xl border bg-background/60">
+                      <div className={`grid grid-cols-2 sm:grid-cols-3 rounded-xl border bg-background/60 ${isInzan ? 'gap-4 p-4' : 'gap-3 p-3'}`}>
                         <div className="space-y-0.5">
                           <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                             {t('attendance.member_id')}
                           </Label>
                           <p className="font-mono text-sm font-bold">
-                            {lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : '—'}
+                            {(() => {
+                              const prefCode = getPreferredMemberCode(lastScannedMember, isInzan);
+                              return prefCode ? `#${prefCode}` : '—';
+                            })()}
                           </p>
                         </div>
                         <div className="space-y-0.5">
@@ -2622,8 +2873,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       </div>
 
                       {/* Primary & Secondary Package + Interactive PT Deduction & Freeze/Unfreeze Tiles */}
-                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div className={`rounded-xl border border-border/60 bg-muted/20 ${isInzan ? 'p-4 space-y-4' : 'p-3 space-y-2.5'}`}>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                           <div className="p-2.5 rounded-lg bg-background border border-emerald-500/25 space-y-1 min-w-0">
                             <div className="flex flex-wrap items-center justify-between gap-1">
                               <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
@@ -2674,7 +2925,27 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                           </div>
                         </div>
 
+                        {/* Quick Desk Actions toggle on Inzan for breathing room (always shown on Strike / auto-open if needed) */}
+                        {isInzan && !isKiosk && (
+                          <div className="flex items-center justify-between pt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowDeskActions((prev) => !prev)}
+                              className="h-8 text-xs font-semibold gap-1.5"
+                            >
+                              {showDeskActions ? 'Hide Desk Actions' : 'Quick Desk Actions (Freeze / PT / Guest Pass)'}
+                            </Button>
+                            <span className="text-[11px] font-mono text-muted-foreground">
+                              PT: {paidPtRem} paid · {freePtRem} free · Freeze: {freezeRem}d
+                            </span>
+                          </div>
+                        )}
+
                         {/* 4 Interactive Entitlement & Action Tiles (Paid PT, Free PT, Invites, Freeze Days) */}
+                        {(!isInzan || isKiosk || showDeskActions || isMemberFrozen || isQuickFreezeOpen || isGuestInviteOpen) && (
+                        <>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                           {/* Tile 1: Paid PT + Direct -1 Deduct Button */}
                           <div className="p-2.5 rounded-lg bg-background border border-blue-500/25 flex flex-col justify-between gap-2 min-w-0">
@@ -2900,13 +3171,15 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                             </div>
                           );
                         })()}
+                        </>
+                        )}
                       </div>
                     </div>
                   );
                 })()}
 
                 {/* 1-Click Guest Invitation Pass Redemption */}
-                {!isKiosk && (
+                {!isKiosk && (!isInzan || showDeskActions || isGuestInviteOpen) && (
                   <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
@@ -2997,12 +3270,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   <Button 
                     variant="ghost" 
                     className="w-full text-muted-foreground"
-                    onClick={() => {
-                      setLastScannedMember(null);
-                      setGatekeeperEval(null);
-                      setError(null);
-                      setIsGuestInviteOpen(false);
-                    }}
+                    onClick={() => clearCurrentCheckinCard(true)}
                   >
                     {t('attendance.dismiss_clear')}
                   </Button>
@@ -3010,11 +3278,30 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-dashed bg-muted/30">
-              <CardContent className="h-[300px] flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
-                <User className="h-12 w-12 mb-4 opacity-20" />
-                <p className="font-medium">{t('attendance.no_member_selected')}</p>
-                <p className="text-xs mt-1">{t('attendance.profile_will_appear')}</p>
+            <Card className="border-dashed bg-muted/20">
+              <CardContent className={`${isInzan ? 'min-h-[340px] p-10' : 'h-[300px] p-6'} flex flex-col items-center justify-center text-center text-muted-foreground`}>
+                {lastCheckinDoneBanner ? (
+                  <div className="space-y-3 max-w-md animate-in fade-in duration-200">
+                    <div className="h-14 w-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto">
+                      <CheckCircle className="h-7 w-7 text-emerald-500" />
+                    </div>
+                    <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+                      Check-in Done ✓
+                    </p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {lastCheckinDoneBanner.name} (#{lastCheckinDoneBanner.code})
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Recorded at {lastCheckinDoneBanner.time}. Enter or scan the next Member ID immediately.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <User className="h-12 w-12 mb-4 opacity-20" />
+                    <p className="font-medium">{t('attendance.no_member_selected')}</p>
+                    <p className="text-xs mt-1">{t('attendance.profile_will_appear')}</p>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

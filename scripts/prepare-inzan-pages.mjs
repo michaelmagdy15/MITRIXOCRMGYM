@@ -60,8 +60,8 @@ let html = fs.readFileSync(indexPath, 'utf8');
 
 const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(inzanConfig)};</script>`;
 html = html.replace('<!-- FIREBASE_CONFIG_PLACEHOLDER -->', scriptTag);
-html = html.replace(/strike_clean_v16_live/g, 'inzan_spark_v17_live');
-html = html.replace(/sw_reloaded=16/g, 'sw_reloaded=17');
+html = html.replace(/strike_clean_v16_live/g, 'inzan_spark_v18_live');
+html = html.replace(/sw_reloaded=16/g, 'sw_reloaded=18');
 html = html.replace(/<title>.*?<\/title>/i, '<title>INZAN Athletics</title>');
 html = html.replace(/\/favicon\.png/g, '/inzan-favicon.png');
 html = html.replace(/\/pwa-icon\.png/g, '/inzan-pwa-icon.png');

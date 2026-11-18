@@ -77,12 +77,12 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       return;
     }
 
-    // Scope live listener to the last 30 days to save 95%+ of Firestore read quota
-    // and avoid loading 10,000+ historical attendance docs into memory on every session.
-    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Scope live listener to the last 7 days on Spark/all tenants to save 98%+ of Firestore read quota
+    // and keep tab switching & occupancy calculations instant.
+    const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const recentAttendanceQuery = query(
       collection(db, 'attendance'),
-      where('date', '>=', thirtyDaysAgoIso)
+      where('date', '>=', sevenDaysAgoIso)
     );
 
     const unsub = onSnapshot(
@@ -294,7 +294,11 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         }
       }
 
-      const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
+      const activePackageSlots = Math.max(
+        1,
+        (client.packages || []).filter((p) => p.status === 'Active' && !p.isPendingConfirmation).length
+      );
+      const totalExpectedSessions = Math.max(activePackageSlots, ptSessionsCount + groupClassesCount);
 
       if (checkinCount >= totalExpectedSessions) {
         const msg =

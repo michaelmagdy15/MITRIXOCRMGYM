@@ -46,7 +46,9 @@ import {
   type WalletRefundRequest,
 } from '../services/pointsService';
 import { db } from '../firebase';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, orderBy, startAt, endAt, limit } from 'firebase/firestore';
+import { getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface ServiceRewardItem {
@@ -250,24 +252,42 @@ export default function MemberWallet({ client }: { client: Client | null }) {
   };
 
   const handleSearchRecipient = async () => {
-    const q = recipientQuery.trim().toLowerCase();
-    if (!q || !client) return;
+    const raw = recipientQuery.trim();
+    if (!raw || !client) return;
     try {
-      const snap = await getDocs(collection(db, 'clients'));
-      const matches = snap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as any) }))
-        .filter(
-          (c) =>
-            c.id !== client.id &&
-            (String(c.name || '').toLowerCase().includes(q) ||
-              String(c.memberId || '').toLowerCase().includes(q) ||
-              String(c.phone || '').includes(q))
-        )
+      const queries: Promise<any>[] = [];
+      const idVariants = getMemberCodeSearchVariants(raw);
+      if (idVariants.length > 0) {
+        queries.push(
+          getDocs(query(collection(db, 'clients'), where('memberId', 'in', idVariants), limit(6))),
+          getDocs(query(collection(db, 'clients'), where('barcode', 'in', idVariants), limit(6)))
+        );
+      }
+      const normPhone = normalizeEgyptPhone(raw);
+      if (normPhone) {
+        queries.push(getDocs(query(collection(db, 'clients'), where('normalized_phone', '==', normPhone), limit(6))));
+      }
+      const phoneVariants = getEgyptPhoneVariants(raw).slice(0, 10);
+      if (phoneVariants.length > 0 && raw.replace(/\D/g, '').length >= 6) {
+        queries.push(getDocs(query(collection(db, 'clients'), where('phone', 'in', phoneVariants), limit(6))));
+      }
+      if (raw.length >= 2 && !/^\d+$/.test(raw.replace(/^#/, ''))) {
+        const cap = raw.charAt(0).toUpperCase() + raw.slice(1);
+        queries.push(getDocs(query(collection(db, 'clients'), orderBy('name'), startAt(cap), endAt(cap + '\uf8ff'), limit(6))));
+      }
+      const snaps = await Promise.all(queries);
+      const seen = new Map<string, any>();
+      for (const s of snaps) {
+        for (const d of s?.docs || []) {
+          if (d.id !== client.id) seen.set(d.id, { id: d.id, ...(d.data() as any) });
+        }
+      }
+      const matches = Array.from(seen.values())
         .slice(0, 6)
         .map((c) => ({
           id: c.id,
           name: String(c.name || 'Member'),
-          memberId: c.memberId != null ? String(c.memberId) : 'N/A',
+          memberId: getPreferredMemberCode(c) || 'N/A',
           phone: String(c.phone || ''),
         }));
       setRecipientResults(matches);

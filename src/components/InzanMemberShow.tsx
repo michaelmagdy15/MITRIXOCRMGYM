@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Client, Payment, Attendance, User, Package } from '../types';
-import { getInzanMemberCodeMeta } from '../constants';
+import { getInzanMemberCodeMeta, getPreferredMemberCode } from '../constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -142,6 +142,9 @@ export function InzanMemberShow({
   }, []);
   const [isActivatingPortal, setIsActivatingPortal] = useState(false);
   const [isResettingPortalPassword, setIsResettingPortalPassword] = useState(false);
+  const [showAllProfileFields, setShowAllProfileFields] = useState(false);
+  const [showPortalControls, setShowPortalControls] = useState(false);
+  const preferredMemberCode = getPreferredMemberCode(client, true);
   const memberReferrals: any[] = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
   const canAdjustDates = canOverridePackageDates(currentUser);
   const [adjustPkgId, setAdjustPkgId] = useState<string | null>(null);
@@ -1312,16 +1315,16 @@ export function InzanMemberShow({
         </div>
         <div className="flex items-center gap-3 sm:gap-4 shrink-0">
           <span className="font-mono font-bold text-zinc-300">
-            ID: {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : (client.leadId || client.redgitsId || client.id); })()}
+            ID: {preferredMemberCode ? `#${preferredMemberCode}` : (client.leadId || client.redgitsId || client.id)}
           </span>
           <span className="text-[11px] font-mono text-zinc-400 hidden xs:inline">TENANT: INZAN ATHLETICS</span>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 overflow-y-auto p-3.5 sm:p-6">
+      <div className="flex-1 overflow-y-auto p-5 sm:p-8">
         {/* View Header with Action Buttons */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 border-b border-border pb-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8 border-b border-border pb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-left">
             <div className="flex items-center gap-3.5 min-w-0">
               {client.photoURL ? (
@@ -1394,18 +1397,18 @@ export function InzanMemberShow({
             {/* Member ID Display Card */}
             <div 
               onClick={() => {
-                const idToCopy = client.memberId ? String(client.memberId).replace(/^#/, '') : client.id;
+                const idToCopy = preferredMemberCode || client.id;
                 if (idToCopy) {
                   navigator.clipboard.writeText(idToCopy);
                   toast.success(`Member ID copied: ${idToCopy}`);
                 }
               }}
               title="Click to copy Member ID"
-              className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border rounded-xl flex sm:flex-col items-center sm:items-start justify-between sm:justify-center shrink-0 shadow-sm gap-2 w-full sm:w-auto"
+              className="px-4 py-2 bg-muted/50 hover:bg-muted/80 transition-colors cursor-pointer border border-border rounded-xl flex sm:flex-col items-center sm:items-start justify-between sm:justify-center shrink-0 shadow-xs gap-1.5 w-full sm:w-auto"
             >
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
               <span className="text-base sm:text-xl font-black font-mono tracking-wider text-foreground">
-                {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : `Lead #${client.leadId || client.redgitsId || client.id || '—'}`; })()}
+                {preferredMemberCode ? `#${preferredMemberCode}` : `Lead #${client.leadId || client.redgitsId || client.id || '—'}`}
               </span>
             </div>
           </div>
@@ -1512,7 +1515,7 @@ export function InzanMemberShow({
                 size="sm"
                 disabled={isActivatingPortal || isResettingPortalPassword}
                 onClick={async () => {
-                  const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                  const effMemberId = preferredMemberCode || client.id;
                   setIsActivatingPortal(true);
                   try {
                     const { uid } = await createClientAccount(client.id, effMemberId, client.name, client.phone);
@@ -1536,7 +1539,7 @@ export function InzanMemberShow({
               size="sm"
               disabled={isResettingPortalPassword || isActivatingPortal}
               onClick={async () => {
-                const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                const effMemberId = preferredMemberCode || client.id;
                 setIsResettingPortalPassword(true);
                 try {
                   const { uid } = await resetClientPortalPassword(
@@ -1567,14 +1570,14 @@ export function InzanMemberShow({
 
         {/* Tab Contents */}
         {activeTab === 'member_data' && (
-          <div className="space-y-6">
-            {/* Desktop Two-Column Sidebar Layout (Strictly User Details Only) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
-              {/* Left Column: Photo & Redgits ID */}
-              <div className="md:col-span-1 space-y-4">
-                {/* Profile Card */}
-                <div className="border border-border rounded-xl p-4 bg-muted/10 flex flex-col items-center justify-center text-center">
-                  <div className="relative group cursor-pointer mb-3">
+          <div className="space-y-8">
+            {/* Desktop Two-Column Airy Layout (Profile Identity + Details) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-7 text-left">
+              {/* Left Column: Consolidated Identity + App Quotas */}
+              <div className="md:col-span-1 space-y-6">
+                {/* Consolidated Profile + Member ID Card */}
+                <div className="border border-border/70 rounded-2xl p-6 bg-card shadow-xs flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="relative group cursor-pointer">
                     {client.photoURL ? (
                       <div className="relative h-28 w-28 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground overflow-hidden">
                         <UserIcon className="h-12 w-12" />
@@ -1610,7 +1613,7 @@ export function InzanMemberShow({
                   </div>
 
                   {photoUploadStatus && (
-                    <span className="text-[10px] text-primary font-bold animate-pulse mb-2">{photoUploadStatus}</span>
+                    <span className="text-[10px] text-primary font-bold animate-pulse">{photoUploadStatus}</span>
                   )}
 
                   <input 
@@ -1621,137 +1624,126 @@ export function InzanMemberShow({
                     className="hidden" 
                   />
 
-                  <h3 className="font-bold text-sm text-foreground">{client.name}</h3>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openClickToCallModal({
-                        clientId: client.id,
-                        memberId: client.memberId,
-                        name: client.name,
-                        phone: client.phone,
-                        backupPhone: client.backupPhone,
-                        status: client.status,
-                        branch: client.branch,
-                        packageType: client.packageType,
-                        source: client.source,
-                      })
-                    }
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline mt-0.5 cursor-pointer"
-                    title="Click to Call"
-                  >
-                    <Phone className="h-3 w-3" />
-                    {client.phone}
-                  </button>
-                  <Badge className="mt-2 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30">
-                    {client.status}
-                  </Badge>
-                </div>
-
-                {/* Redgits Member ID Badge */}
-                <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
-                  <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{getSafeCleanMemberId(client.memberId) || client.leadId || client.redgitsId || '—'}</span>
-                  {(() => {
-                    const codeMeta = getInzanMemberCodeMeta(client.memberId);
-                    if (!codeMeta) return null;
-                    return (
-                      <Badge variant="outline" className={`mt-2 text-[10px] font-bold px-2 py-0.5 ${codeMeta.badgeClass}`}>
-                        {codeMeta.prefix} • {codeMeta.label}
-                      </Badge>
-                    );
-                  })()}
-                </div>
-
-                {/* Member Portal Access & Password Reset Card */}
-                <div className="border border-indigo-500/30 rounded-xl p-3.5 bg-indigo-500/5 space-y-2.5 text-left">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
-                      Member Portal Access
-                    </span>
-                    {client.portalUserId ? (
-                      <Badge className="bg-emerald-600 text-white text-[10px] h-4 px-1.5 font-bold">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-bold border-amber-500/40 text-amber-600">
-                        Not Activated
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-[11px] font-mono text-muted-foreground space-y-0.5">
-                    <div>
-                      Login ID: <strong className="text-foreground">#{client.memberId || client.id}</strong>
-                    </div>
-                    {client.phone ? (
-                      <div>
-                        Phone: <strong className="text-foreground">{client.phone}</strong>
-                      </div>
-                    ) : null}
-                    <div>
-                      Default Pass: <strong className="text-foreground">12345678</strong>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5 pt-1">
-                    {!client.portalUserId && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={isActivatingPortal || isResettingPortalPassword}
-                        onClick={async () => {
-                          const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
-                          setIsActivatingPortal(true);
-                          try {
-                            const { uid } = await createClientAccount(client.id, effMemberId, client.name, client.phone);
-                            await onUpdateClient(client.id, { portalUserId: uid });
-                            toast.success(
-                              `Member Portal enabled for ${client.name}! Login ID: #${effMemberId} | Default Password: 12345678`
-                            );
-                          } catch (err: any) {
-                            toast.error(err?.message || 'Failed to enable member portal');
-                          } finally {
-                            setIsActivatingPortal(false);
-                          }
-                        }}
-                        className="w-full h-7 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
-                      >
-                        <Unlock className="h-3.5 w-3.5" />
-                        {isActivatingPortal ? 'Activating...' : 'Enable Portal Access'}
-                      </Button>
-                    )}
-                    <Button
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-base text-foreground">{client.name}</h3>
+                    <button
                       type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={isResettingPortalPassword || isActivatingPortal}
-                      onClick={async () => {
-                        const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
-                        setIsResettingPortalPassword(true);
-                        try {
-                          const { uid } = await resetClientPortalPassword(
-                            client.id,
-                            effMemberId,
-                            client.name,
-                            client.portalUserId,
-                            client.phone
-                          );
-                          if (!client.portalUserId && uid) {
-                            await onUpdateClient(client.id, { portalUserId: uid });
-                          }
-                          toast.success(
-                            `Portal password reset to 12345678 for ${client.name} (Login ID: #${effMemberId})`
-                          );
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Failed to reset member password');
-                        } finally {
-                          setIsResettingPortalPassword(false);
-                        }
-                      }}
-                      className="w-full h-7 text-xs font-bold border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 gap-1.5"
+                      onClick={() =>
+                        openClickToCallModal({
+                          clientId: client.id,
+                          memberId: client.memberId,
+                          name: client.name,
+                          phone: client.phone,
+                          backupPhone: client.backupPhone,
+                          status: client.status,
+                          branch: client.branch,
+                          packageType: client.packageType,
+                          source: client.source,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                      title="Click to Call"
                     >
-                      <Key className="h-3.5 w-3.5" />
-                      {isResettingPortalPassword ? 'Resetting...' : 'Reset Password (12345678)'}
-                    </Button>
+                      <Phone className="h-3 w-3" />
+                      {client.phone}
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/60 w-full flex flex-col items-center gap-2">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Member Code</span>
+                    <span className="text-2xl font-black font-mono text-rose-500 tracking-wider">
+                      #{preferredMemberCode || client.leadId || client.redgitsId || '—'}
+                    </span>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15 border border-emerald-500/30">
+                        {client.status}
+                      </Badge>
+                      {(() => {
+                        const codeMeta = getInzanMemberCodeMeta(preferredMemberCode || client.barcode);
+                        if (!codeMeta) return null;
+                        return (
+                          <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 ${codeMeta.badgeClass}`}>
+                            {codeMeta.prefix} • {codeMeta.shortLabel}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Collapsible Portal Access Controls */}
+                  <div className="w-full pt-2 border-t border-border/50 text-left">
+                    <button
+                      type="button"
+                      onClick={() => setShowPortalControls((prev) => !prev)}
+                      className="w-full flex items-center justify-between text-[11px] font-semibold text-muted-foreground hover:text-foreground py-1 cursor-pointer"
+                    >
+                      <span>Portal: {client.portalUserId ? 'Active' : 'Not Activated'}</span>
+                      <span className="text-primary font-bold">{showPortalControls ? 'Hide' : 'Manage'}</span>
+                    </button>
+                    {showPortalControls && (
+                      <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
+                        <p className="text-[11px] font-mono text-muted-foreground">
+                          Login ID: <strong className="text-foreground">#{preferredMemberCode || client.id}</strong> · Default Pass: <strong className="text-foreground">12345678</strong>
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          {!client.portalUserId && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={isActivatingPortal || isResettingPortalPassword}
+                              onClick={async () => {
+                                const effMemberId = preferredMemberCode || client.id;
+                                setIsActivatingPortal(true);
+                                try {
+                                  const { uid } = await createClientAccount(client.id, effMemberId, client.name, client.phone);
+                                  await onUpdateClient(client.id, { portalUserId: uid });
+                                  toast.success(`Member Portal enabled for ${client.name}! Login ID: #${effMemberId} | Default Password: 12345678`);
+                                } catch (err: any) {
+                                  toast.error(err?.message || 'Failed to enable member portal');
+                                } finally {
+                                  setIsActivatingPortal(false);
+                                }
+                              }}
+                              className="w-full h-7 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                            >
+                              <Unlock className="h-3.5 w-3.5" />
+                              {isActivatingPortal ? 'Activating...' : 'Enable Portal Access'}
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isResettingPortalPassword || isActivatingPortal}
+                            onClick={async () => {
+                              const effMemberId = preferredMemberCode || client.id;
+                              setIsResettingPortalPassword(true);
+                              try {
+                                const { uid } = await resetClientPortalPassword(
+                                  client.id,
+                                  effMemberId,
+                                  client.name,
+                                  client.portalUserId,
+                                  client.phone
+                                );
+                                if (!client.portalUserId && uid) {
+                                  await onUpdateClient(client.id, { portalUserId: uid });
+                                }
+                                toast.success(`Portal password reset to 12345678 for ${client.name} (Login ID: #${effMemberId})`);
+                              } catch (err: any) {
+                                toast.error(err?.message || 'Failed to reset member password');
+                              } finally {
+                                setIsResettingPortalPassword(false);
+                              }
+                            }}
+                            className="w-full h-7 text-xs font-bold border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 gap-1.5"
+                          >
+                            <Key className="h-3.5 w-3.5" />
+                            {isResettingPortalPassword ? 'Resetting...' : 'Reset Password (12345678)'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1919,24 +1911,30 @@ export function InzanMemberShow({
                 })()}
               </div>
 
-              {/* Right Column: Key-Value User Details Grid */}
-              <div className="md:col-span-3 border border-border p-6 rounded-xl bg-muted/5">
-                <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
+              {/* Right Column: Clean Airy User Details Grid */}
+              <div className="md:col-span-3 border border-border/70 p-6 sm:p-8 rounded-2xl bg-card shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-6 border-b border-border pb-3">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-primary">User Profile Details</h3>
-                  <span className="text-[10px] text-muted-foreground">
-                    Packages &amp; Invitations are managed in the <strong>Packages &amp; Invites</strong> tab
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllProfileFields((prev) => !prev)}
+                      className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                    >
+                      {(isEditing || showAllProfileFields) ? 'Hide Secondary Fields' : 'Show More Fields (+16)'}
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
                   {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client, isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser)))}
-                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client, isGeneralManagerOrCEO(currentUser)))}
+                  {renderField('Member ID / Code', preferredMemberCode || client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client, isGeneralManagerOrCEO(currentUser)))}
+                  {renderField('Bar-code / RFID', client.barcode, 'barcode', 'text', undefined, isFieldLockedForUser('barcode', currentUser, client))}
                   {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client, isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser)))}
-                  {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
-                  {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
+                  {renderField('Gender', client.gender, 'gender', 'select', [
+                    { value: 'Male', label: 'Male' },
+                    { value: 'Female', label: 'Female' }
+                  ], isFieldLockedForUser('gender', currentUser, client))}
                   {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
-                  {renderField('National ID', client.nationalId, 'nationalId', 'text', undefined, isFieldLockedForUser('nationalId', currentUser, client))}
-                  {renderField('Email', client.email, 'email', 'text', undefined, isFieldLockedForUser('email', currentUser, client))}
-                  {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
                   {renderField(
                     'Sales Man',
                     users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || (client as any).salesName || 'unassigned',
@@ -1956,251 +1954,136 @@ export function InzanMemberShow({
                     assignableCoaches.map(u => ({ value: u.id, label: `${u.name}${u.email ? ` (${u.email})` : ''}` })),
                     isFieldLockedForUser('assignedCoachId', currentUser, client)
                   )}
-                  {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
-                  {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}
-                  {renderField('Level', client.activityLevel, 'activityLevel', 'select', [
-                    { value: 'Beginner', label: 'Beginner' },
-                    { value: 'Intermediate', label: 'Intermediate' },
-                    { value: 'Advanced', label: 'Advanced' }
-                  ], isFieldLockedForUser('activityLevel', currentUser, client))}
-                  {renderField('Goal', client.fitnessTarget, 'fitnessTarget', 'select', [
-                    { value: 'Loss Weight', label: 'Loss Weight' },
-                    { value: 'Build Muscle', label: 'Build Muscle' },
-                    { value: 'Fitness', label: 'Fitness' },
-                    { value: 'Rehab', label: 'Rehab' }
-                  ], isFieldLockedForUser('fitnessTarget', currentUser, client))}
-                  {renderField('Civil Status', client.civilStatus, 'civilStatus', 'text', undefined, isFieldLockedForUser('civilStatus', currentUser, client))}
                   {renderField('Status', client.status)}
-                  {renderField('Address', client.address, 'address', 'text', undefined, isFieldLockedForUser('address', currentUser, client))}
-                  {renderField('Member Code', client.legacyMemberId, 'legacyMemberId', 'text', undefined, isFieldLockedForUser('legacyMemberId', currentUser, client))}
-                  {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName', 'text', undefined, isFieldLockedForUser('emergencyContactName', currentUser, client))}
-                  {renderField('Gender', client.gender, 'gender', 'select', [
-                    { value: 'Male', label: 'Male' },
-                    { value: 'Female', label: 'Female' }
-                  ], isFieldLockedForUser('gender', currentUser, client))}
                   {renderField('Type', client.typeOfClient, 'typeOfClient', 'text', undefined, isFieldLockedForUser('typeOfClient', currentUser, client))}
-                  {renderField('Guest Serial', client.guestSerial, 'guestSerial', 'text', undefined, isFieldLockedForUser('guestSerial', currentUser, client))}
-                  {renderField('Advertising Source', client.advertisingSource, 'advertisingSource', 'text', undefined, isFieldLockedForUser('advertisingSource', currentUser, client))}
-                  {renderField('Bar-code / RFID', client.barcode, 'barcode', 'text', undefined, isFieldLockedForUser('barcode', currentUser, client))}
-                  {renderField('Nationality', client.nationality, 'nationality', 'text', undefined, isFieldLockedForUser('nationality', currentUser, client))}
-                  {renderField('Civilian/Military', client.civilianOrMilitary, 'civilianOrMilitary', 'select', [
-                    { value: 'None', label: 'None' },
-                    { value: 'Civilian', label: 'Civilian' },
-                    { value: 'Military', label: 'Military' }
-                  ], isFieldLockedForUser('civilianOrMilitary', currentUser, client))}
-                  {renderField('Card ID', client.cardId, 'cardId', 'text', undefined, isFieldLockedForUser('cardId', currentUser, client))}
-                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo', 'text', undefined, isFieldLockedForUser('medicalInfo', currentUser, client))}
-                  {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
-                    { value: 'Morning', label: 'Morning' },
-                    { value: 'Afternoon', label: 'Afternoon' },
-                    { value: 'Evening', label: 'Evening' },
-                    { value: 'Night', label: 'Night' }
-                  ], isFieldLockedForUser('preferredTime', currentUser, client))}
-                  {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
-                    { value: 'red', label: '🔴 Red' },
-                    { value: 'green', label: '🟢 Green' },
-                    { value: 'blue', label: '🔵 Blue' },
-                    { value: 'purple', label: '🟣 Purple' },
-                    { value: 'yellow', label: '🟡 Yellow' },
-                    { value: 'orange', label: '🟠 Orange' },
-                    { value: 'pink', label: '🩷 Pink' },
-                    { value: 'brown', label: '🟤 Brown' }
-                  ], isFieldLockedForUser('colorLabel', currentUser, client))}
-                  {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
+                  {renderField('National ID', client.nationalId, 'nationalId', 'text', undefined, isFieldLockedForUser('nationalId', currentUser, client))}
+                  {renderField('Email', client.email, 'email', 'text', undefined, isFieldLockedForUser('email', currentUser, client))}
+
+                  {(isEditing || showAllProfileFields) && (
+                    <>
+                      {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
+                      {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
+                      {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
+                      {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
+                      {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}
+                      {renderField('Level', client.activityLevel, 'activityLevel', 'select', [
+                        { value: 'Beginner', label: 'Beginner' },
+                        { value: 'Intermediate', label: 'Intermediate' },
+                        { value: 'Advanced', label: 'Advanced' }
+                      ], isFieldLockedForUser('activityLevel', currentUser, client))}
+                      {renderField('Goal', client.fitnessTarget, 'fitnessTarget', 'select', [
+                        { value: 'Loss Weight', label: 'Loss Weight' },
+                        { value: 'Build Muscle', label: 'Build Muscle' },
+                        { value: 'Fitness', label: 'Fitness' },
+                        { value: 'Rehab', label: 'Rehab' }
+                      ], isFieldLockedForUser('fitnessTarget', currentUser, client))}
+                      {renderField('Civil Status', client.civilStatus, 'civilStatus', 'text', undefined, isFieldLockedForUser('civilStatus', currentUser, client))}
+                      {renderField('Address', client.address, 'address', 'text', undefined, isFieldLockedForUser('address', currentUser, client))}
+                      {renderField('Member Code', client.legacyMemberId, 'legacyMemberId', 'text', undefined, isFieldLockedForUser('legacyMemberId', currentUser, client))}
+                      {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName', 'text', undefined, isFieldLockedForUser('emergencyContactName', currentUser, client))}
+                      {renderField('Guest Serial', client.guestSerial, 'guestSerial', 'text', undefined, isFieldLockedForUser('guestSerial', currentUser, client))}
+                      {renderField('Advertising Source', client.advertisingSource, 'advertisingSource', 'text', undefined, isFieldLockedForUser('advertisingSource', currentUser, client))}
+                      {renderField('Nationality', client.nationality, 'nationality', 'text', undefined, isFieldLockedForUser('nationality', currentUser, client))}
+                      {renderField('Civilian/Military', client.civilianOrMilitary, 'civilianOrMilitary', 'select', [
+                        { value: 'None', label: 'None' },
+                        { value: 'Civilian', label: 'Civilian' },
+                        { value: 'Military', label: 'Military' }
+                      ], isFieldLockedForUser('civilianOrMilitary', currentUser, client))}
+                      {renderField('Card ID', client.cardId, 'cardId', 'text', undefined, isFieldLockedForUser('cardId', currentUser, client))}
+                      {renderField('Medical Info', client.medicalInfo, 'medicalInfo', 'text', undefined, isFieldLockedForUser('medicalInfo', currentUser, client))}
+                      {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
+                        { value: 'Morning', label: 'Morning' },
+                        { value: 'Afternoon', label: 'Afternoon' },
+                        { value: 'Evening', label: 'Evening' },
+                        { value: 'Night', label: 'Night' }
+                      ], isFieldLockedForUser('preferredTime', currentUser, client))}
+                      {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
+                        { value: 'red', label: '🔴 Red' },
+                        { value: 'green', label: '🟢 Green' },
+                        { value: 'blue', label: '🔵 Blue' },
+                        { value: 'purple', label: '🟣 Purple' },
+                        { value: 'yellow', label: '🟡 Yellow' },
+                        { value: 'orange', label: '🟠 Orange' },
+                        { value: 'pink', label: '🩷 Pink' },
+                        { value: 'brown', label: '🟤 Brown' }
+                      ], isFieldLockedForUser('colorLabel', currentUser, client))}
+                      {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Front Desk / Receptionist Quick Actions: Guest Invites & Unlimited Referrals */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-              {/* Card 1: Guest Invitations (Deducts from package quota) */}
-              <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UserPlus className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-950 dark:text-sky-100">
-                      Guest Invitations (Workout Passes)
-                    </h4>
-                  </div>
-                  <Badge className="bg-sky-600 text-white font-bold text-xs">
-                    {Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0)} Passes Left
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Official workout visitor pass. Deducts 1 pass from member's package quota upon invitation and check-in.
-                </p>
-
-                {showQuickInviteForm ? (
-                  <div className="space-y-2.5 pt-2 border-t border-sky-500/20">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Guest Full Name *"
-                        value={quickGuestName}
-                        onChange={e => setQuickGuestName(e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
-                      <Input
-                        placeholder="Guest Phone Number *"
-                        value={quickGuestPhone}
-                        onChange={e => setQuickGuestPhone(e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setShowQuickInviteForm(false)}
-                        className="h-7 text-xs"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={isSubmittingQuickInvite}
-                        onClick={handleSendQuickGuestInvite}
-                        className="h-7 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white"
-                      >
-                        {isSubmittingQuickInvite ? 'Issuing...' : 'Issue Guest Pass'}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between pt-2 border-t border-sky-500/20">
-                    <button
-                      onClick={() => setActiveTab('package_data')}
-                      className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-semibold"
-                    >
-                      View all invite history in Packages tab →
-                    </button>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowQuickInviteForm(true)}
-                      disabled={Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0) <= 0}
-                      className="h-7 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Issue Guest Pass
-                    </Button>
-                  </div>
-                )}
+            {/* Calm 1-row Guest Invites & Referrals summary bar (full forms live cleanly in Packages & Invites tab) */}
+            <div className="rounded-2xl border border-border/70 bg-card px-6 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xs text-left">
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                  Guest Passes: <strong>{Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0)} left</strong>
+                </span>
+                <span className="text-border">|</span>
+                <span className="text-muted-foreground">
+                  Referrals: <strong className="text-foreground">{memberReferrals.length}</strong>
+                </span>
               </div>
-
-              {/* Card 2: Unlimited Referrals (0 quota used, for sales follow-up) */}
-              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-100">
-                      Unlimited Member Referrals
-                    </h4>
-                  </div>
-                  <Badge className="bg-emerald-600 text-white font-bold text-xs">
-                    ∞ Unlimited ({memberReferrals.length} Referred)
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Friend/family contact referral for Sales follow-up. Does NOT consume any guest invitations quota.
-                </p>
-
-                {showAddReferralForm ? (
-                  <div className="space-y-2.5 pt-2 border-t border-emerald-500/20">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Friend's Full Name *"
-                        value={referralName}
-                        onChange={e => setReferralName(e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
-                      <Input
-                        placeholder="Phone Number *"
-                        value={referralPhone}
-                        onChange={e => setReferralPhone(e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
-                    </div>
-                    <Input
-                      placeholder="Notes (optional, e.g. interested in 3 Months + PT)"
-                      value={referralNotes}
-                      onChange={e => setReferralNotes(e.target.value)}
-                      className="h-8 text-xs bg-background"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setShowAddReferralForm(false)}
-                        className="h-7 text-xs"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={isSubmittingReferral}
-                        onClick={handleAddUnlimitedReferral}
-                        className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
-                      >
-                        {isSubmittingReferral ? 'Saving...' : 'Save Referral Lead'}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20">
-                    <span className="text-[11px] text-muted-foreground truncate max-w-[60%]">
-                      {memberReferrals.length > 0
-                        ? `Total: ${memberReferrals.length} friend referral${memberReferrals.length > 1 ? 's' : ''}`
-                        : 'No referrals submitted yet.'}
-                    </span>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowAddReferralForm(true)}
-                      className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add Referral Lead
-                    </Button>
-                  </div>
-                )}
-
-                {/* Referrals List Table */}
-                {memberReferrals.length > 0 && (
-                  <div className="pt-2 border-t border-emerald-500/20 space-y-1.5">
-                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider block">
-                      Member's Referred Contacts ({memberReferrals.length})
-                    </span>
-                    <div className="max-h-36 overflow-y-auto rounded-lg border border-emerald-500/20 bg-background/60">
-                      <table className="w-full text-left text-[11px]">
-                        <thead>
-                          <tr className="border-b border-border/40 text-muted-foreground text-[10px] bg-muted/30">
-                            <th className="p-1.5 font-bold">Name</th>
-                            <th className="p-1.5 font-bold">Phone</th>
-                            <th className="p-1.5 font-bold">Notes</th>
-                            <th className="p-1.5 font-bold text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {memberReferrals.map((r, i) => (
-                            <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-muted/20">
-                              <td className="p-1.5 font-bold text-foreground">{r.name}</td>
-                              <td className="p-1.5 font-mono text-muted-foreground">{r.phone}</td>
-                              <td className="p-1.5 text-muted-foreground truncate max-w-[120px]">{r.notes || '—'}</td>
-                              <td className="p-1.5 text-right">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-5 text-[10px] text-emerald-600 hover:bg-emerald-500/10 px-1 font-bold"
-                                  onClick={() => openWhatsAppChat({ phone: String(r.phone || '') })}
-                                >
-                                  WhatsApp
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowQuickInviteForm((prev) => !prev)}
+                  disabled={Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0) <= 0}
+                  className="h-8 text-xs font-bold gap-1"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {showQuickInviteForm ? 'Close Pass Form' : 'Issue Guest Pass'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setActiveTab('package_data')}
+                  className="h-8 text-xs font-semibold text-primary"
+                >
+                  Manage Packages &amp; Referrals →
+                </Button>
               </div>
             </div>
+
+            {showQuickInviteForm && (
+              <div className="p-5 rounded-2xl border border-border/70 bg-card space-y-3 shadow-xs text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    placeholder="Guest Full Name *"
+                    value={quickGuestName}
+                    onChange={e => setQuickGuestName(e.target.value)}
+                    className="h-9 text-xs bg-background"
+                  />
+                  <Input
+                    placeholder="Guest Phone Number *"
+                    value={quickGuestPhone}
+                    onChange={e => setQuickGuestPhone(e.target.value)}
+                    className="h-9 text-xs bg-background"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowQuickInviteForm(false)}
+                    className="h-8 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={isSubmittingQuickInvite}
+                    onClick={handleSendQuickGuestInvite}
+                    className="h-8 text-xs font-bold bg-primary text-primary-foreground"
+                  >
+                    {isSubmittingQuickInvite ? 'Issuing...' : 'Issue Guest Pass'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Smart Locker Hardware Control Card (Front Desk & Operations) */}
             {(() => {
@@ -2220,7 +2103,7 @@ export function InzanMemberShow({
                 (assignedLocker?.gender === 'women' ? 'Women' : assignedLocker?.gender === 'men' ? 'Men' : assignedLocker?.location || 'Locker Zone');
 
               return (
-                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-3 shadow-xs text-left">
+                <div className="p-6 rounded-2xl border border-border/70 bg-card space-y-4 shadow-xs text-left">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -2423,7 +2306,7 @@ export function InzanMemberShow({
             })()}
 
             {/* Member Feedback & Staff Notes Section (Editable by Any Staff Member) */}
-            <div className="border border-border p-5 rounded-xl bg-muted/10 text-left space-y-3">
+            <div className="border border-border/70 p-6 rounded-2xl bg-card shadow-xs text-left space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
@@ -3089,7 +2972,7 @@ export function InzanMemberShow({
                                   <option value={pkg.packageName}>{pkg.packageName} (Current)</option>
                                   {filteredCatalogPackages.map(cp => (
                                     <option key={cp.id} value={cp.name}>
-                                      {cp.name} ({cp.price?.toLocaleString()} LE)
+                                      {cp.name}
                                     </option>
                                   ))}
                                 </select>

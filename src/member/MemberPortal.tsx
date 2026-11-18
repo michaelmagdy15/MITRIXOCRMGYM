@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity, Dumbbell } from 'lucide-react';
 import { auth, db, getTenantId } from '../firebase';
-import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, query, where, doc, documentId, getDoc, getDocs, limit, onSnapshot, setDoc } from 'firebase/firestore';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { Client } from '../types';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
+import { getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
 
 import MemberHome from './MemberHome';
 import MemberNotificationBell from './MemberNotificationBell';
@@ -83,7 +84,8 @@ const getClientTierBadge = (client?: Client | null): string => {
 };
 
 const formatSwitcherLabel = (client: Client, primaryClient?: Client | null): string => {
-  const memberId = client.memberId ? ` #${client.memberId}` : '';
+  const code = getPreferredMemberCode(client);
+  const memberId = code ? ` #${code}` : '';
   const you = primaryClient && client.id === primaryClient.id ? ' (You)' : '';
   return `${client.name}${memberId} - ${getClientTierBadge(client)}${you}`;
 };
@@ -359,16 +361,11 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
     const findClient = async () => {
       try {
-        // Option A: Match by memberId (clientRecordId)
-        if (currentUser?.clientRecordId) {
-          const q = query(
-            collection(db, 'clients'),
-            where('memberId', '==', currentUser.clientRecordId.trim())
-          );
-          const snapshot = await getDocs(q);
-          if (!snapshot.empty && snapshot.docs[0]) {
-            const docSnap = snapshot.docs[0];
-            const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+        // Option 0: Direct clientDocId read (1 Firestore read, works for letter-prefixed codes like P20)
+        if (currentUser?.clientDocId) {
+          const directSnap = await getDoc(doc(db, 'clients', currentUser.clientDocId));
+          if (directSnap.exists()) {
+            const pClient = { ...directSnap.data(), id: directSnap.id } as Client;
             if (active) {
               setPrimaryClient(pClient);
               setActiveClient(pClient);
@@ -379,11 +376,39 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           }
         }
 
+        // Option A: Match by memberId or barcode (clientRecordId)
+        if (currentUser?.clientRecordId) {
+          const codeVariants = getMemberCodeSearchVariants(currentUser.clientRecordId);
+          if (codeVariants.length > 0) {
+            const snapshot = await getDocs(
+              query(collection(db, 'clients'), where('memberId', 'in', codeVariants), limit(1))
+            );
+            let docSnap = !snapshot.empty ? snapshot.docs[0] : null;
+            if (!docSnap) {
+              const bcSnapshot = await getDocs(
+                query(collection(db, 'clients'), where('barcode', 'in', codeVariants), limit(1))
+              );
+              if (!bcSnapshot.empty) docSnap = bcSnapshot.docs[0];
+            }
+            if (docSnap) {
+              const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+              if (active) {
+                setPrimaryClient(pClient);
+                setActiveClient(pClient);
+                setSelectedClientId(prev => prev || pClient.id);
+                setLoading(false);
+              }
+              return;
+            }
+          }
+        }
+
         // Option B: Match by portalUserId (user's auth UID)
         if (currentUser?.id) {
           const qUid = query(
             collection(db, 'clients'),
-            where('portalUserId', '==', currentUser.id)
+            where('portalUserId', '==', currentUser.id),
+            limit(1)
           );
           const uidSnap = await getDocs(qUid);
           if (!uidSnap.empty && uidSnap.docs[0]) {
@@ -399,13 +424,13 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           }
         }
 
-        // Option C: Match by Phone Number
+        // Option C: Match by Phone Number (indexed queries only — no full collection scans)
         const userPhone = currentUser?.phone || '';
         if (userPhone) {
           const normPhone = normalizeEgyptPhone(userPhone);
           if (normPhone) {
             try {
-              const normQ = query(collection(db, 'clients'), where('normalized_phone', '==', normPhone));
+              const normQ = query(collection(db, 'clients'), where('normalized_phone', '==', normPhone), limit(1));
               const normSnap = await getDocs(normQ);
               if (!normSnap.empty && normSnap.docs[0] && active) {
                 const docSnap = normSnap.docs[0];
@@ -419,11 +444,10 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             } catch {}
           }
 
-          const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
-          if (cleanPhone) {
-            // Try exact Firestore where query first (cheap, indexed)
+          const variants = getEgyptPhoneVariants(userPhone).slice(0, 10);
+          if (variants.length > 0) {
             try {
-              const phoneQ = query(collection(db, 'clients'), where('phone', '==', userPhone));
+              const phoneQ = query(collection(db, 'clients'), where('phone', 'in', variants), limit(1));
               const phoneSnap = await getDocs(phoneQ);
               if (!phoneSnap.empty && phoneSnap.docs[0] && active) {
                 const docSnap = phoneSnap.docs[0];
@@ -434,33 +458,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 setLoading(false);
                 return;
               }
-            } catch {
-              // where('phone') may fail if no index exists; fall through to fallback
-            }
-
-            // Fallback: limited scan over active statuses only (not full collection)
-            console.warn("Performance warning: phone-based client lookup falling back to filtered scan");
-            try {
-              const limitedQ = query(
-                collection(db, 'clients'),
-                where('status', 'in', ['Active', 'Nearly Expired', 'Expired', 'Hold'])
-              );
-              const limitedSnap = await getDocs(limitedQ);
-              const matched = limitedSnap.docs.find(d => {
-                const cPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
-                return cPhone && cPhone === cleanPhone;
-              });
-              if (matched && active) {
-                const pClient = { ...matched.data(), id: matched.id } as Client;
-                setPrimaryClient(pClient);
-                setActiveClient(pClient);
-                setSelectedClientId(prev => prev || pClient.id);
-                setLoading(false);
-                return;
-              }
-            } catch {
-              // status-based query also failed; skip this option
-            }
+            } catch {}
           }
         }
 
