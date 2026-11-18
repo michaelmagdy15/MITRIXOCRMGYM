@@ -105,6 +105,7 @@ import {
   activatePendingGuestInvite,
 } from './services/guestReferralService';
 import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
+import { resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from './services/storageService';
 import { isSalesRepOnly } from './utils/permissions';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
@@ -2157,8 +2158,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   {(() => {
                     const m = lastScannedMember as any;
                     const rawPhoto = String(m.photoURL || m.photoUrl || m.avatar || '').trim();
-                    const isBrokenRoot = /\/uploads\/?$/i.test(rawPhoto);
-                    const displayPhoto = rawPhoto && !isBrokenRoot ? rawPhoto : '';
+                    const displayPhoto = resolveMemberPhotoUrl(rawPhoto, m.photoLocal, getTenantId());
                     return (
                       <button
                         type="button"
@@ -2176,7 +2176,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                             alt={lastScannedMember.name}
                             className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
                             onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              const el = e.currentTarget as HTMLImageElement;
+                              const fallback = getMemberPhotoFallbackUrl(displayPhoto, m.photoLocal);
+                              if (fallback && !el.dataset.triedFallback) {
+                                el.dataset.triedFallback = '1';
+                                el.src = fallback;
+                                return;
+                              }
+                              el.style.display = 'none';
                             }}
                           />
                         )}

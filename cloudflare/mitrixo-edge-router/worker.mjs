@@ -48,7 +48,11 @@ export default {
     // Cairo active gym window: 6:00 AM - 1:00 AM Cairo (04:00 - 22:59 UTC) = ~589h/mo,
     // leaving 161h/mo buffer inside Render's 750h/mo free workspace limit.
     if (utcHour >= 4 && utcHour < 23) {
-      ctx.waitUntil(fetch(`${gatewayOrigin}/api/health`).catch(() => {}));
+      ctx.waitUntil(
+        fetch(`${gatewayOrigin}/api/health`, {
+          headers: { 'User-Agent': 'Mitrixo-Edge-KeepWarm/1.0' },
+        }).catch(() => {})
+      );
       if (utcMin % 20 === 0) {
         ctx.waitUntil(
           fetch(`${gatewayOrigin}/api/cron/no-show-check`, {

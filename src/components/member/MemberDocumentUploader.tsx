@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Client, ClientDocument } from '../../types';
-import { storage, getTenantId } from '../../firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getTenantId } from '../../firebase';
+import { uploadTenantAsset } from '../../services/storageService';
 import { safeFormatDate } from '../../utils/dateUtils';
 import { compressDocumentImage, blobToDataUrl } from '../../utils/imageUtils';
 import { addAuditLog } from '../../services/auditService';
@@ -131,20 +131,21 @@ export function MemberDocumentUploader({
         // Compress image files down to crisp ~150-300KB JPEGs
         const preparedBlob = await compressDocumentImage(file);
         const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
-        const fileRef = storageRef(
-          storage,
-          `tenants/${getTenantId()}/member_documents/${client.id}/${crypto.randomUUID()}_${safeName}`
-        );
+        const storagePath = `tenants/${getTenantId()}/member_documents/${client.id}/${crypto.randomUUID()}_${safeName}`;
 
         try {
-          await uploadBytes(fileRef, preparedBlob, {
+          resolvedUrl = await uploadTenantAsset(storagePath, preparedBlob, {
             contentType: preparedBlob.type || file.type || 'application/octet-stream',
+            kind: 'document',
+            fileName: file.name,
           });
-          resolvedUrl = await getDownloadURL(fileRef);
         } catch (storageError) {
-          console.warn('[MemberDocumentUploader] Storage upload failed, falling back to local compressed data URL:', storageError);
-          // Zero-failure fallback: save compressed DataURL directly so document is never lost
-          resolvedUrl = await blobToDataUrl(preparedBlob);
+          if (preparedBlob.size <= 60 * 1024) {
+            console.warn('[MemberDocumentUploader] Upload failed, falling back to compact <=60KB inline data URL:', storageError);
+            resolvedUrl = await blobToDataUrl(preparedBlob);
+          } else {
+            throw storageError;
+          }
         }
       }
 

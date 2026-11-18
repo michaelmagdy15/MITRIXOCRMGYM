@@ -32,8 +32,8 @@ import { matchesPhoneSearch } from './utils/phoneUtils';
 import { matchesFuzzyNameSearch, scoreNameMatch } from './utils/fuzzyNameSearch';
 import { toCanonicalBranchId } from './utils/memberCategories';
 import { isTenantInzan, isValidNationalIdOrPassport, isValidEgyptianMobile } from './utils/inzanOrg';
-import { getTenantId, storage } from './firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getTenantId } from './firebase';
+import { uploadTenantAsset } from './services/storageService';
 import { addAuditLog } from './services/auditService';
 import { useOperationId } from './hooks/useOperationId';
 import { ShieldAlert, Paperclip, MessageCircle, CheckCircle, Clock, Download } from 'lucide-react';
@@ -2209,9 +2209,11 @@ export default function Payments() {
                           try {
                             const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
                             const path = `corporate_proofs/${clientId || 'guest'}_${Date.now()}_${cleanName}`;
-                            const r = storageRef(storage, path);
-                            await uploadBytes(r, file);
-                            const url = await getDownloadURL(r);
+                            const url = await uploadTenantAsset(path, file, {
+                              contentType: file.type,
+                              kind: 'document',
+                              fileName: file.name,
+                            });
                             setCorporateProofUrl(url);
                             setCorporateProofFileName(file.name);
                           } catch (err: any) {

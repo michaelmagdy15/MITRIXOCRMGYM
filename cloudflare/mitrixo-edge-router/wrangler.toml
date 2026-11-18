@@ -6,4 +6,4 @@ compatibility_date = "2025-01-01"
 GATEWAY_ORIGIN = "https://mitrixo-gateway.onrender.com"
 
 [triggers]
-crons = ["*/10 * * * *", "01 22 * * *"]
+crons = ["*/5 * * * *", "01 22 * * *"]

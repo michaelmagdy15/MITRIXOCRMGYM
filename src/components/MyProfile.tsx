@@ -1,8 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getPasswordStrength, validateNewPassword } from '../utils/passwordStrength';
-import { storage } from '../firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadTenantAsset } from '../services/storageService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,9 +92,10 @@ export default function MyProfile() {
       const sizeKb = Math.round(compressed.size / 1024);
 
       setAvatarPhase('uploading');
-      const fileRef = storageRef(storage, `avatars/${currentUser.id}`);
-      await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(`avatars/${currentUser.id}`, compressed, {
+        contentType: 'image/jpeg',
+        kind: 'avatar',
+      });
       await updateMyProfile({ photoURL: url });
       setAvatarStatus(`Profile picture updated! (${sizeKb} KB)`);
     } catch (err: any) {

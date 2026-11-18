@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
-import { storage } from '../firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadTenantAsset } from '../services/storageService';
 import ImageCropperDialog from './ImageCropperDialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,9 +80,10 @@ export default function AdminStorefrontManager() {
     setUploading(uploadTarget.id);
     try {
       const path = `${uploadTarget.type}/${uploadTarget.id}_${Date.now()}.jpg`;
-      const ref = storageRef(storage, `storefront/${path}`);
-      await uploadBytes(ref, blob, { contentType: blob.type || 'image/jpeg' });
-      const url = await getDownloadURL(ref);
+      const url = await uploadTenantAsset(`storefront/${path}`, blob, {
+        contentType: blob.type || 'image/jpeg',
+        kind: 'banner',
+      });
 
       if (uploadTarget.type === 'hero') {
         setConfig(prev => ({

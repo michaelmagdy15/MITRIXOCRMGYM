@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { db, storage, auth, getTenantId } from '../firebase';
+import { db, auth, getTenantId } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch, limit } from 'firebase/firestore';
 import { getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadTenantAsset, resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../services/storageService';
 import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2, Bell, Dumbbell, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -189,9 +189,11 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
     setIsUploadingPhoto(true);
     try {
       const compressed = await compressImage(file);
-      const fileRef = storageRef(storage, `member_photos/${client.id}_pending_${Date.now()}`);
-      await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(
+        `member_photos/${client.id}_pending_${Date.now()}`,
+        compressed,
+        { contentType: 'image/jpeg', kind: 'avatar' }
+      );
 
       const clientRef = doc(db, 'clients', client.id);
       await updateDoc(clientRef, {
@@ -434,11 +436,28 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
           {/* Avatar Circle */}
           <div className="relative group">
             <div className="h-16 w-16 rounded-2xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-xl font-extrabold text-primary shrink-0 overflow-hidden">
-              {client?.photoURL ? (
-                <img src={client.photoURL} alt={client.name} className="w-full h-full object-cover" />
-              ) : (
-                initials
-              )}
+              {(() => {
+                const profilePhotoUrl = resolveMemberPhotoUrl(client?.photoURL, (client as any)?.photoLocal);
+                return profilePhotoUrl ? (
+                  <img
+                    src={profilePhotoUrl}
+                    alt={client?.name || 'Member'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      const fallback = getMemberPhotoFallbackUrl(profilePhotoUrl, (client as any)?.photoLocal);
+                      if (fallback && !el.dataset.triedFallback) {
+                        el.dataset.triedFallback = '1';
+                        el.src = fallback;
+                        return;
+                      }
+                      el.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  initials
+                );
+              })()}
             </div>
             
             <input

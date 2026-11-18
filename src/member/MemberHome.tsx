@@ -26,6 +26,7 @@ import { Skeleton, SkeletonCard } from './components/Skeleton';
 import { MemberAccountLinkCard } from './components/MemberAccountLinkCard';
 import { MemberBenefitsWallet } from '../components/member/MemberBenefitsWallet';
 import { getPreferredMemberCode } from '../constants';
+import { resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../services/storageService';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -1113,27 +1114,46 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               {/* Member Photo on Pass */}
-              <div 
-                className="relative h-12 w-12 rounded-xl bg-zinc-800 border border-zinc-700/80 shrink-0 overflow-hidden flex items-center justify-center cursor-pointer group"
-                onClick={() => onNavigate?.('profile')}
-                title={client.photoURL ? 'View Profile' : 'Upload Profile Photo'}
-              >
-                {client.photoURL ? (
-                  <img src={client.photoURL} alt={client.name} className="w-full h-full object-cover" />
-                ) : client.pendingPhotoURL ? (
-                  <>
-                    <img src={client.pendingPhotoURL} alt="Pending" className="w-full h-full object-cover opacity-75" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <Clock className="h-4 w-4 text-amber-400" />
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors">
-                    <Camera className="h-4 w-4" />
-                    <span className="text-[8px] font-bold mt-0.5">+Photo</span>
+              {(() => {
+                const passPhotoUrl = resolveMemberPhotoUrl(client.photoURL, (client as any).photoLocal);
+                return (
+                  <div 
+                    className="relative h-12 w-12 rounded-xl bg-zinc-800 border border-zinc-700/80 shrink-0 overflow-hidden flex items-center justify-center cursor-pointer group"
+                    onClick={() => onNavigate?.('profile')}
+                    title={passPhotoUrl ? 'View Profile' : 'Upload Profile Photo'}
+                  >
+                    {passPhotoUrl ? (
+                      <img
+                        src={passPhotoUrl}
+                        alt={client.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const el = e.currentTarget as HTMLImageElement;
+                          const fallback = getMemberPhotoFallbackUrl(passPhotoUrl, (client as any).photoLocal);
+                          if (fallback && !el.dataset.triedFallback) {
+                            el.dataset.triedFallback = '1';
+                            el.src = fallback;
+                            return;
+                          }
+                          el.style.display = 'none';
+                        }}
+                      />
+                    ) : client.pendingPhotoURL ? (
+                      <>
+                        <img src={client.pendingPhotoURL} alt="Pending" className="w-full h-full object-cover opacity-75" />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <Clock className="h-4 w-4 text-amber-400" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors">
+                        <Camera className="h-4 w-4" />
+                        <span className="text-[8px] font-bold mt-0.5">+Photo</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">

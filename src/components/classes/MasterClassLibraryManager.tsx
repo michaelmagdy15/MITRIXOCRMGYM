@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, getTenantId } from '../../firebase';
+import { uploadTenantAsset } from '../../services/storageService';
+import { getTenantId } from '../../firebase';
 import { useMasterClasses } from '../../hooks/useMasterClasses';
 import { MasterClassDefinition } from '../../types/class';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -176,9 +176,11 @@ export function MasterClassLibraryManager() {
     try {
       const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
       const storagePath = `tenants/${getTenantId()}/master_classes/${crypto.randomUUID()}_${safeName}`;
-      const fileRef = storageRef(storage, storagePath);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const downloadUrl = await getDownloadURL(fileRef);
+      const downloadUrl = await uploadTenantAsset(storagePath, file, {
+        contentType: file.type,
+        kind: 'banner',
+        fileName: file.name,
+      });
       setImageUrl(downloadUrl);
       toast.success('Class profile image uploaded');
     } catch (error: any) {

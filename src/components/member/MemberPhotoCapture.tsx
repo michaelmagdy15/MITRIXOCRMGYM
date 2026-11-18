@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Client } from '../../types';
-import { storage, getTenantId } from '../../firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getTenantId } from '../../firebase';
+import { uploadTenantAsset, resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../../services/storageService';
 import { addAuditLog } from '../../services/auditService';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,12 +44,7 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
       ''
   ).trim();
 
-  // Filter out broken RedGITS directory-only placeholder URLs ("https://inzan.redgits.com/uploads/")
-  const isBrokenUploadsRoot = /\/uploads\/?$/i.test(rawPhotoCandidate);
-  const resolvedPhotoUrl =
-    rawPhotoCandidate && !isBrokenUploadsRoot
-      ? rawPhotoCandidate
-      : '';
+  const resolvedPhotoUrl = resolveMemberPhotoUrl(rawPhotoCandidate, (client as any).photoLocal);
 
   const currentPhoto = imgLoadFailed ? '' : resolvedPhotoUrl;
 
@@ -157,18 +152,17 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
     setIsSaving(true);
     try {
       let finalUrl = dataUrl;
-      // Attempt Firebase Storage upload first, with automatic compressed dataUrl fallback
+      // Upload via tenant storage router (compact dataURL on Spark, Firebase Storage on Strike)
       try {
         const res = await fetch(dataUrl);
         const blob = await res.blob();
-        const fileRef = storageRef(
-          storage,
-          `tenants/${getTenantId()}/member_photos/${client.id}_${Date.now()}.jpg`
+        finalUrl = await uploadTenantAsset(
+          `tenants/${getTenantId()}/member_photos/${client.id}_${Date.now()}.jpg`,
+          blob,
+          { contentType: 'image/jpeg', kind: 'avatar' }
         );
-        await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
-        finalUrl = await getDownloadURL(fileRef);
       } catch {
-        // Fallback to compact 360x360 JPEG dataURL (~20KB) so it always succeeds
+        // Fallback to compact JPEG dataURL so offline reception capture always succeeds
         finalUrl = dataUrl;
       }
 
@@ -236,7 +230,16 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
               src={currentPhoto}
               alt={client.name}
               className="h-full w-full object-cover"
-              onError={() => setImgLoadFailed(true)}
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement;
+                const fallback = getMemberPhotoFallbackUrl(currentPhoto, (client as any).photoLocal);
+                if (fallback && !el.dataset.triedFallback) {
+                  el.dataset.triedFallback = '1';
+                  el.src = fallback;
+                  return;
+                }
+                setImgLoadFailed(true);
+              }}
             />
           ) : (
             <User className={`${size === 'xl' ? 'h-14 w-14' : 'h-7 w-7'} text-amber-500/80`} />

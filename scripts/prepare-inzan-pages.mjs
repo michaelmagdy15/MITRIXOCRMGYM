@@ -54,14 +54,22 @@ if (!fs.existsSync(DIST_DIR) || !fs.existsSync(path.join(DIST_DIR, 'index.html')
 fs.rmSync(OUT_DIR, { recursive: true, force: true });
 copyTreeFiltered(DIST_DIR, OUT_DIR);
 
+const MEMBER_PHOTOS_SRC = path.join(ROOT, 'backups', 'member_photos_web');
+if (fs.existsSync(MEMBER_PHOTOS_SRC)) {
+  const memberPhotosDest = path.join(OUT_DIR, 'member-photos');
+  copyTreeFiltered(MEMBER_PHOTOS_SRC, memberPhotosDest);
+  const photoCount = fs.readdirSync(memberPhotosDest).length;
+  console.log(`[prepare-inzan-pages] Copied ${photoCount} optimized member photos to dist-inzan/member-photos/`);
+}
+
 const inzanConfig = loadInzanConfig();
 const indexPath = path.join(OUT_DIR, 'index.html');
 let html = fs.readFileSync(indexPath, 'utf8');
 
 const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(inzanConfig)};</script>`;
 html = html.replace('<!-- FIREBASE_CONFIG_PLACEHOLDER -->', scriptTag);
-html = html.replace(/strike_clean_v16_live/g, 'inzan_spark_v18_live');
-html = html.replace(/sw_reloaded=16/g, 'sw_reloaded=18');
+html = html.replace(/strike_clean_v16_live/g, 'inzan_spark_v19_live');
+html = html.replace(/sw_reloaded=16/g, 'sw_reloaded=19');
 html = html.replace(/<title>.*?<\/title>/i, '<title>INZAN Athletics</title>');
 html = html.replace(/\/favicon\.png/g, '/inzan-favicon.png');
 html = html.replace(/\/pwa-icon\.png/g, '/inzan-pwa-icon.png');
@@ -119,6 +127,8 @@ const headers = `/index.html
 /manifest.json
   Cache-Control: no-cache, no-store, must-revalidate
 /assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/member-photos/*
   Cache-Control: public, max-age=31536000, immutable
 `;
 fs.writeFileSync(path.join(OUT_DIR, '_headers'), headers, 'utf8');

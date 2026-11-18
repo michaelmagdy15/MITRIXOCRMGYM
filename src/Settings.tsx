@@ -3,9 +3,9 @@ import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { storage, db, auth } from './firebase';
+import { db, auth } from './firebase';
 import { collection, getDocs, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadTenantAsset } from './services/storageService';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -255,9 +255,11 @@ export default function Settings() {
     setLogoUploadStatus(null);
     try {
       const extension = file.name.split('.').pop() || 'png';
-      const fileRef = storageRef(storage, `branding/logo-${Date.now()}.${extension}`);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(`branding/logo-${Date.now()}.${extension}`, file, {
+        contentType: file.type,
+        kind: 'banner',
+        fileName: file.name,
+      });
       setLogoUrl(url);
       setLogoUploadStatus('Logo uploaded successfully!');
     } catch (err: any) {
@@ -285,9 +287,11 @@ export default function Settings() {
     setSplashBgUploadStatus(null);
     try {
       const extension = file.name.split('.').pop() || 'png';
-      const fileRef = storageRef(storage, `branding/splash-bg-${Date.now()}.${extension}`);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(`branding/splash-bg-${Date.now()}.${extension}`, file, {
+        contentType: file.type,
+        kind: 'banner',
+        fileName: file.name,
+      });
       setSplashScreenUrl(url);
       setSplashBgUploadStatus('Wallpaper uploaded successfully!');
     } catch (err: any) {
@@ -315,9 +319,11 @@ export default function Settings() {
     setSplashLogoUploadStatus(null);
     try {
       const extension = file.name.split('.').pop() || 'png';
-      const fileRef = storageRef(storage, `branding/splash-logo-${Date.now()}.${extension}`);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(`branding/splash-logo-${Date.now()}.${extension}`, file, {
+        contentType: file.type,
+        kind: 'banner',
+        fileName: file.name,
+      });
       setSplashScreenLogoUrl(url);
       setSplashLogoUploadStatus('Splash logo uploaded successfully!');
     } catch (err: any) {

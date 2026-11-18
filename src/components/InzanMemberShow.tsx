@@ -22,8 +22,8 @@ import { openWhatsAppChat } from '../utils/whatsappTemplates';
 import { format } from 'date-fns';
 import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
-import { db, storage } from '../firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db } from '../firebase';
+import { uploadTenantAsset, resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../services/storageService';
 import { collection, query, where, onSnapshot, addDoc, orderBy, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
@@ -848,9 +848,10 @@ export function InzanMemberShow({
     try {
       const compressed = await compressImage(file);
       setPhotoUploadStatus('Uploading...');
-      const fileRef = storageRef(storage, `member_photos/${client.id}`);
-      await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadTenantAsset(`member_photos/${client.id}`, compressed, {
+        contentType: 'image/jpeg',
+        kind: 'avatar',
+      });
       
       await onUpdateClient(client.id, { photoURL: url, photoStatus: 'APPROVED', pendingPhotoURL: '' });
       
@@ -1327,23 +1328,33 @@ export function InzanMemberShow({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8 border-b border-border pb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-left">
             <div className="flex items-center gap-3.5 min-w-0">
-              {client.photoURL ? (
-                <div className="relative h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground shrink-0 overflow-hidden">
-                  <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
-                  <img
-                    src={client.photoURL}
-                    alt={client.name}
-                    className="absolute inset-0 h-full w-full rounded-full object-cover"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
-                  <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
-                </div>
-              )}
+              {(() => {
+                const headerPhotoUrl = resolveMemberPhotoUrl(client.photoURL, (client as any).photoLocal);
+                return headerPhotoUrl ? (
+                  <div className="relative h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground shrink-0 overflow-hidden">
+                    <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
+                    <img
+                      src={headerPhotoUrl}
+                      alt={client.name}
+                      className="absolute inset-0 h-full w-full rounded-full object-cover"
+                      onError={(e) => {
+                        const el = e.currentTarget as HTMLImageElement;
+                        const fallback = getMemberPhotoFallbackUrl(headerPhotoUrl, (client as any).photoLocal);
+                        if (fallback && !el.dataset.triedFallback) {
+                          el.dataset.triedFallback = '1';
+                          el.src = fallback;
+                          return;
+                        }
+                        el.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
+                    <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
+                  </div>
+                );
+              })()}
               <div className="min-w-0 flex-1">
                 <h2 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2 flex-wrap">
                   <span className="truncate">View Member Info - ( {client.name} )</span>
@@ -1578,23 +1589,33 @@ export function InzanMemberShow({
                 {/* Consolidated Profile + Member ID Card */}
                 <div className="border border-border/70 rounded-2xl p-6 bg-card shadow-xs flex flex-col items-center justify-center text-center space-y-3">
                   <div className="relative group cursor-pointer">
-                    {client.photoURL ? (
-                      <div className="relative h-28 w-28 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground overflow-hidden">
-                        <UserIcon className="h-12 w-12" />
-                        <img
-                          src={client.photoURL}
-                          alt={client.name}
-                          className="absolute inset-0 h-full w-full rounded-full object-cover"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
-                        <UserIcon className="h-12 w-12" />
-                      </div>
-                    )}
+                    {(() => {
+                      const cardPhotoUrl = resolveMemberPhotoUrl(client.photoURL, (client as any).photoLocal);
+                      return cardPhotoUrl ? (
+                        <div className="relative h-28 w-28 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground overflow-hidden">
+                          <UserIcon className="h-12 w-12" />
+                          <img
+                            src={cardPhotoUrl}
+                            alt={client.name}
+                            className="absolute inset-0 h-full w-full rounded-full object-cover"
+                            onError={(e) => {
+                              const el = e.currentTarget as HTMLImageElement;
+                              const fallback = getMemberPhotoFallbackUrl(cardPhotoUrl, (client as any).photoLocal);
+                              if (fallback && !el.dataset.triedFallback) {
+                                el.dataset.triedFallback = '1';
+                                el.src = fallback;
+                                return;
+                              }
+                              el.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
+                          <UserIcon className="h-12 w-12" />
+                        </div>
+                      );
+                    })()}
                     
                     {/* Hover Overlay */}
                     <div 

@@ -12,10 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
 import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag, FolderCog, PauseCircle, PlayCircle, Target, Calendar, User as UserIcon, Search, ArrowUpDown } from 'lucide-react';
-import { storage, getTenantId } from './firebase';
+import { getTenantId } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getEffectivePackageHierarchy, getEffectivePackageCategory } from './utils/membershipRules';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadTenantAsset } from './services/storageService';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImageCropperDialog from './components/ImageCropperDialog';
 import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
@@ -113,9 +113,10 @@ export default function Packages() {
     setUploading(true);
     try {
       const path = `packages/pkg_${Date.now()}.jpg`;
-      const ref = storageRef(storage, path);
-      await uploadBytes(ref, blob, { contentType: blob.type || 'image/jpeg' });
-      const url = await getDownloadURL(ref);
+      const url = await uploadTenantAsset(path, blob, {
+        contentType: blob.type || 'image/jpeg',
+        kind: 'banner',
+      });
       setImageUrl(url);
     } catch (err: any) {
       console.error('Failed to upload image:', err);

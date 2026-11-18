@@ -4,6 +4,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import zlib from "node:zlib";
+import crypto from "node:crypto";
 
 // Short-lived per-tenant auth membership cache (keyed strictly by `${tenantId}:${uid}`)
 const tenantAuthCache = new Map<string, { role: string; expiresAt: number }>();
@@ -652,6 +653,96 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Cron API] Error running no-show scan:", err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Free-tier Firestore-backed media storage for Spark projects without Firebase Storage buckets.
+  // Strike (and any tenant using Firebase Storage directly) never calls this endpoint.
+  const ALLOWED_STORAGE_CONTENT_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'application/pdf',
+  ]);
+  const MAX_SPARK_STORAGE_BYTES = 700 * 1024;
+
+  app.post("/api/storage/upload", requireAuth, async (req, res) => {
+    try {
+      const { dataBase64, contentType, fileName, category } = req.body || {};
+      if (typeof dataBase64 !== 'string' || !dataBase64.trim()) {
+        res.status(400).json({ error: 'Missing dataBase64 payload.' });
+        return;
+      }
+      const cleanBase64 = dataBase64.trim().replace(/^data:[^;]+;base64,/i, '').replace(/\s+/g, '');
+      const buf = Buffer.from(cleanBase64, 'base64');
+      if (!buf.length) {
+        res.status(400).json({ error: 'Invalid or empty base64 file payload.' });
+        return;
+      }
+      if (buf.length > MAX_SPARK_STORAGE_BYTES) {
+        res.status(413).json({ error: 'File exceeds 700 KB free-tier storage limit after compression.' });
+        return;
+      }
+
+      const rawType = String(contentType || '').split(';')[0]!.trim().toLowerCase();
+      const safeType = ALLOWED_STORAGE_CONTENT_TYPES.has(rawType) ? rawType : 'application/octet-stream';
+      const safeFileName = String(fileName || 'asset')
+        .replace(/[^\w.-]+/g, '_')
+        .slice(0, 120) || 'asset';
+      const assetId = crypto.randomUUID().replace(/-/g, '');
+      const db = await getDbForRequest(req);
+
+      await db.collection('media_assets').doc(assetId).set({
+        contentType: safeType,
+        base64Data: buf.toString('base64'),
+        byteLength: buf.length,
+        fileName: safeFileName,
+        category: String(category || 'general').replace(/[^\w.-]+/g, '_').slice(0, 40) || 'general',
+        uploadedBy: String((req as any).user?.uid || ''),
+        createdAt: new Date().toISOString(),
+      });
+
+      res.json({ id: assetId, url: `/api/storage/file/${assetId}` });
+    } catch (err: any) {
+      console.error("[API] Error uploading storage asset:", err);
+      res.status(500).json({ error: err?.message || 'Failed to store uploaded file.' });
+    }
+  });
+
+  app.get("/api/storage/file/:id", async (req, res) => {
+    try {
+      const assetId = String(req.params.id || '').trim();
+      if (!/^[a-zA-Z0-9_-]{8,64}$/.test(assetId)) {
+        res.status(400).json({ error: 'Invalid asset ID.' });
+        return;
+      }
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('media_assets').doc(assetId).get();
+      if (!snap.exists) {
+        res.status(404).json({ error: 'Asset not found.' });
+        return;
+      }
+      const data = snap.data() || {};
+      const base64Data = typeof data.base64Data === 'string' ? data.base64Data : '';
+      if (!base64Data) {
+        res.status(404).json({ error: 'Asset payload missing.' });
+        return;
+      }
+      const buf = Buffer.from(base64Data, 'base64');
+      const rawType = String(data.contentType || '').split(';')[0]!.trim().toLowerCase();
+      const safeType = ALLOWED_STORAGE_CONTENT_TYPES.has(rawType) ? rawType : 'application/octet-stream';
+      const safeFileName = String(data.fileName || assetId).replace(/["\r\n\\]/g, '_').slice(0, 120);
+      const disposition = safeType === 'application/octet-stream' ? 'attachment' : 'inline';
+
+      res.setHeader('Content-Type', safeType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Content-Disposition', `${disposition}; filename="${safeFileName}"`);
+      res.send(buf);
+    } catch (err: any) {
+      console.error("[API] Error serving storage asset:", err);
+      res.status(500).json({ error: err?.message || 'Failed to read asset.' });
     }
   });
 

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Client, CorporateCompany } from '../types';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
+import { uploadTenantAsset } from '../services/storageService';
 import {
   validateEgyptNationalId,
   getMemberNationalIdScanUrl,
@@ -44,9 +43,11 @@ export const NationalIdVerificationControl: React.FC<NationalIdVerificationContr
     setUploading(true);
     try {
       const targetId = client?.id || `new_${Date.now()}`;
-      const fRef = storageRef(storage, `member_documents/${targetId}/national_id_${Date.now()}_${file.name}`);
-      await uploadBytes(fRef, file);
-      const url = await getDownloadURL(fRef);
+      const url = await uploadTenantAsset(
+        `member_documents/${targetId}/national_id_${Date.now()}_${file.name}`,
+        file,
+        { contentType: file.type, kind: 'document', fileName: file.name }
+      );
       onScanUrlChange(url);
     } catch (err) {
       console.error('Failed to upload National ID scan:', err);
