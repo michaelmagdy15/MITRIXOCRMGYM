@@ -1,5 +1,5 @@
 import { collection, addDoc, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
-import { db, getTenantId } from '../firebase';
+import { db, getTenantId, auth } from '../firebase';
 import { cleanData } from '../utils';
 import {
   NotificationEventType,
@@ -217,9 +217,13 @@ export async function dispatchNotificationEvent(
           });
         } else if (typeof window !== 'undefined' && 'fetch' in window) {
           // Push via Expo proxy endpoint (browser client fallback)
+          const idToken = await auth.currentUser?.getIdToken().catch(() => null);
           await fetch('/api/proxy-push', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
             body: JSON.stringify({
               userId: params.recipientId,
               title,

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAppContext } from './context';
+import { getTenantId } from './firebase';
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
@@ -137,15 +138,22 @@ export default function AdvancedReports({
   const [quickNoteFollowUpDate, setQuickNoteFollowUpDate] = useState('');
   const [quickNoteSaving, setQuickNoteSaving] = useState(false);
 
-  // Ensure all expired members and historical payments are loaded when opening Premium Reports
+  // Ensure expired members / historical payments are loaded when needed (avoid burning Spark quota on Inzan mount)
   useEffect(() => {
-    if (!expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
+    const isInzan = getTenantId() === 'inzanathletics';
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const needsExpired = !isInzan || activeReport === 'expired-members';
+    const needsHistorical = !isInzan || (Boolean(dateFrom) && dateFrom < thirtyDaysAgoStr);
+
+    if (needsExpired && !expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
       fetchExpiredMembers();
     }
-    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+    if (needsHistorical && !historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
       fetchHistoricalPayments();
     }
   }, [
+    activeReport,
+    dateFrom,
     expiredLoaded,
     loadingExpired,
     fetchExpiredMembers,

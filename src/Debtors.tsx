@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { downloadFile } from './utils/download';
 import { useAppContext } from './context';
+import { getTenantId } from './firebase';
 import { useLanguage } from './contexts/LanguageContext';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
@@ -111,17 +112,20 @@ export default function Debtors() {
   const { language, isRtl } = useLanguage();
   const { payments, clients, users, attendances, updatePayment, branches, setActiveTab, setActiveClientId, fetchHistoricalPayments, historicalPaymentsLoaded, loadingHistoricalPayments } = useAppContext();
 
-  useEffect(() => {
-    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
-      fetchHistoricalPayments();
-    }
-  }, [historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
-
   const currentLoc = LOCALES[language as 'en' | 'ar'] || LOCALES.en;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  useEffect(() => {
+    const isInzan = getTenantId() === 'inzanathletics';
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const wantsHistorical = !isInzan || (Boolean(startDate) && startDate < thirtyDaysAgoStr);
+    if (wantsHistorical && !historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+      fetchHistoricalPayments();
+    }
+  }, [startDate, historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
   const [selectedBranch, setSelectedBranch] = useState('ALL');
 
   // Payment dialog state

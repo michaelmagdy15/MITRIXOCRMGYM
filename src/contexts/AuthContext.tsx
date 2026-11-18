@@ -1080,7 +1080,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const approvePasswordResetRequest = async (id: string, email: string) => {
-    const isSyntheticEmail = email.endsWith('@mitrixogymcrm-member.local');
+    const isSyntheticEmail = email.toLowerCase().endsWith('.local');
 
     if (!isSyntheticEmail) {
       // Real email — Firebase sends a reset link directly

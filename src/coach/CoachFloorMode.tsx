@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { 
-  collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, onSnapshot 
+  collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, onSnapshot, limit 
 } from 'firebase/firestore';
 import { Client, Session } from '../types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -439,11 +439,16 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
     toast.success(`Copied ${exercises.length} exercises to all ${activeFloorClients.length} active floor clients!`);
   };
 
-  // 1. Fetch clients list for picker
+  // 1. Fetch active clients list for picker (never scan full archived client DB on Spark)
   useEffect(() => {
     const loadClients = async () => {
       try {
-        const snap = await getDocs(collection(db, 'clients'));
+        const isInzan = getTenantId().toLowerCase().includes('inzan');
+        const activeStatuses = ['Active', 'Hold', 'Nearly Expired', 'active', 'hold', 'nearly expired', 'Frozen', 'frozen'];
+        const q = isInzan
+          ? query(collection(db, 'clients'), where('status', 'in', activeStatuses), limit(600))
+          : query(collection(db, 'clients'), where('status', 'in', activeStatuses));
+        const snap = await getDocs(q);
         const list = snap.docs.map(d => ({ ...d.data(), id: d.id } as Client));
         list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setClients(list);

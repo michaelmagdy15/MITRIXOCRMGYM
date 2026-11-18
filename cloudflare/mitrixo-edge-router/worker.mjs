@@ -63,6 +63,16 @@ export default {
           }).catch(() => {})
         );
       }
+      if (utcMin % 30 === 0) {
+        ctx.waitUntil(
+          fetch(`${gatewayOrigin}/api/cron/class-reminders`, {
+            method: 'POST',
+            headers: {
+              'x-cron-secret': env.CRON_SECRET || '',
+            },
+          }).catch(() => {})
+        );
+      }
     }
 
     if (

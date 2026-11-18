@@ -22,7 +22,9 @@ import {
   Clock,
 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, startAt, endAt, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
+import { getEgyptPhoneVariants, normalizeEgyptPhone } from '../utils/phoneUtils';
 import { useAppContext } from '../context';
 import {
   creditPoints,
@@ -121,26 +123,74 @@ export default function AdminPointsManager() {
     seedDefaultBundles().then(() => loadAllAdminData());
   }, []);
 
+  const searchClientsIndexed = async (
+    rawInput: string,
+    maxCount: number,
+    excludeId?: string
+  ): Promise<{ id: string; name: string; memberId: string; phone: string }[]> => {
+    const trimmed = rawInput.trim().replace(/^#/, '');
+    if (!trimmed) return [];
+
+    const matchesMap = new Map<string, any>();
+    const addSnap = (snap: any) => {
+      snap?.docs?.forEach((d: any) => matchesMap.set(d.id, { id: d.id, ...d.data() }));
+    };
+
+    const digits = trimmed.replace(/\D/g, '');
+    const codeVariants = getMemberCodeSearchVariants(trimmed).slice(0, 10);
+    const ops: Promise<any>[] = [];
+
+    if (codeVariants.length > 0) {
+      ops.push(getDocs(query(collection(db, 'clients'), where('memberId', 'in', codeVariants), limit(maxCount))).then(addSnap).catch(() => {}));
+      ops.push(getDocs(query(collection(db, 'clients'), where('barcode', 'in', codeVariants), limit(maxCount))).then(addSnap).catch(() => {}));
+    }
+    if (/^\d+$/.test(trimmed)) {
+      ops.push(getDocs(query(collection(db, 'clients'), where('memberId', '==', Number(trimmed)), limit(maxCount))).then(addSnap).catch(() => {}));
+    }
+    if (digits.length >= 4) {
+      const phoneVars = getEgyptPhoneVariants(trimmed).slice(0, 10);
+      const normPhone = normalizeEgyptPhone(trimmed);
+      if (phoneVars.length > 0) {
+        ops.push(getDocs(query(collection(db, 'clients'), where('phone', 'in', phoneVars), limit(maxCount))).then(addSnap).catch(() => {}));
+      }
+      if (normPhone) {
+        ops.push(getDocs(query(collection(db, 'clients'), where('normalized_phone', '==', normPhone), limit(maxCount))).then(addSnap).catch(() => {}));
+      }
+    }
+    if (trimmed.length >= 2 && !/^\d+$/.test(trimmed)) {
+      const cap = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+      const titleCase = trimmed
+        .split(/\s+/)
+        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ''))
+        .join(' ');
+      for (const prefix of Array.from(new Set([trimmed, cap, titleCase]))) {
+        ops.push(
+          getDocs(
+            query(collection(db, 'clients'), orderBy('name'), startAt(prefix), endAt(prefix + '\uf8ff'), limit(15))
+          )
+            .then(addSnap)
+            .catch(() => {})
+        );
+      }
+    }
+
+    await Promise.all(ops);
+
+    return Array.from(matchesMap.values())
+      .filter((c: any) => !excludeId || c.id !== excludeId)
+      .slice(0, maxCount)
+      .map((c: any) => ({
+        id: c.id,
+        name: String(c.name || ''),
+        memberId: getPreferredMemberCode(c, true) || 'N/A',
+        phone: String(c.phone || ''),
+      }));
+  };
+
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
     try {
-      const snap = await getDocs(collection(db, 'clients'));
-      const term = searchTerm.toLowerCase().trim();
-      const results = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as any))
-        .filter(
-          (c: any) =>
-            String(c.name || '').toLowerCase().includes(term) ||
-            String(c.memberId || '').toLowerCase().includes(term) ||
-            String(c.phone || '').includes(term)
-        )
-        .slice(0, 10)
-        .map((c: any) => ({
-          id: c.id,
-          name: String(c.name || ''),
-          memberId: c.memberId != null ? String(c.memberId) : 'N/A',
-          phone: String(c.phone || ''),
-        }));
+      const results = await searchClientsIndexed(searchTerm, 10);
       setSearchResults(results);
     } catch (err) {
       console.error('Search failed:', err);
@@ -150,24 +200,7 @@ export default function AdminPointsManager() {
   const handleSearchTransferTarget = async () => {
     if (!transferSearch.trim()) return;
     try {
-      const snap = await getDocs(collection(db, 'clients'));
-      const term = transferSearch.toLowerCase().trim();
-      const results = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as any))
-        .filter(
-          (c: any) =>
-            c.id !== selectedMember?.id &&
-            (String(c.name || '').toLowerCase().includes(term) ||
-              String(c.memberId || '').toLowerCase().includes(term) ||
-              String(c.phone || '').includes(term))
-        )
-        .slice(0, 8)
-        .map((c: any) => ({
-          id: c.id,
-          name: String(c.name || ''),
-          memberId: c.memberId != null ? String(c.memberId) : 'N/A',
-          phone: String(c.phone || ''),
-        }));
+      const results = await searchClientsIndexed(transferSearch, 8, selectedMember?.id);
       setTransferResults(results);
     } catch (err) {
       console.error('Transfer search failed:', err);

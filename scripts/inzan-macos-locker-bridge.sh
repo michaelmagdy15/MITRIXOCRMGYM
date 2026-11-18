@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-CRM_URL="${INZAN_CRM_URL:-https://admin.inzanathletics.com}"
+CRM_URL="${INZAN_CRM_URL:-https://mitrixo-gateway.onrender.com}"
 LOCAL_URL="${INZAN_LOCAL_LOCKER_URL:-http://192.168.10.31:3701}"
 
 echo "Fetching and installing Inzan macOS Locker Bridge from ${CRM_URL}..."

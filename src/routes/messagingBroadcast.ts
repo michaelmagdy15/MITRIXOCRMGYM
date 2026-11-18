@@ -340,13 +340,26 @@ async function collectAudienceRecipients(
     allContacts: number;
   };
 }> {
-  const [snap, droneListDoc] = await Promise.all([
-    db.collection('clients').get(),
-    db.collection('secrets_config').doc('drone_shoot_list').get().catch(() => null),
-  ]);
+  const droneListDoc = await db.collection('secrets_config').doc('drone_shoot_list').get().catch(() => null);
   const droneShootRecipients: NormalizedRecipient[] = Array.isArray(droneListDoc?.data()?.recipients)
     ? droneListDoc!.data()!.recipients
     : [];
+
+  // Avoid scanning 10k+ clients for drone_shoot_list / custom_list broadcasts; filter query for active/leads
+  let snap: FirebaseFirestore.QuerySnapshot | null = null;
+  if (audience === 'active_members') {
+    snap = await db
+      .collection('clients')
+      .where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'Nearly expired', 'active', 'hold', 'nearly expired'])
+      .get();
+  } else if (audience === 'leads_only') {
+    snap = await db
+      .collection('clients')
+      .where('status', 'in', ['Lead', 'lead'])
+      .get();
+  } else if (audience === 'all_members' || audience === 'all_contacts') {
+    snap = await db.collection('clients').get();
+  }
 
   const activeMap = new Map<string, NormalizedRecipient>();
   const allMembersMap = new Map<string, NormalizedRecipient>();
@@ -356,7 +369,7 @@ async function collectAudienceRecipients(
   const normalizedBranchFilter =
     branchFilter && branchFilter !== 'ALL' ? branchFilter.trim().toLowerCase() : null;
 
-  snap.forEach((docSnap) => {
+  snap?.forEach((docSnap) => {
     const d = docSnap.data();
     if (!d || d.isDeleted) return;
 
@@ -1016,26 +1029,6 @@ export function createMessagingBroadcastRouter(
       if (!ctx) return;
 
       const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
-      const clientSnap = await ctx.db.collection('clients').get();
-      const phoneToMember = new Map<
-        string,
-        { name: string; memberId: string; status: string }
-      >();
-
-      clientSnap.forEach((docSnap) => {
-        const d = docSnap.data();
-        const p =
-          normalizeBroadcastPhone(d.phone) ||
-          normalizeBroadcastPhone(d.normalized_phone) ||
-          normalizeBroadcastPhone(d.backupPhone);
-        if (p) {
-          phoneToMember.set(p, {
-            name: String(d.name || 'Member').trim(),
-            memberId: String(d.memberId ?? d.customId ?? d.code ?? '').trim(),
-            status: String(d.status || 'Active').trim(),
-          });
-        }
-      });
 
       const repliesMap = new Map<
         string,
@@ -1049,6 +1042,7 @@ export function createMessagingBroadcastRouter(
           createdAt: string;
         }
       >();
+      const phonesNeeded = new Set<string>();
 
       // 1. Read stored webhook replies from Firestore
       const storedSnap = await ctx.db
@@ -1062,13 +1056,13 @@ export function createMessagingBroadcastRouter(
         storedSnap.forEach((d) => {
           const data = d.data();
           const normP = normalizeBroadcastPhone(data.fromPhone) || String(data.fromPhone || '');
-          const matched = phoneToMember.get(normP);
+          if (normP) phonesNeeded.add(normP);
           repliesMap.set(d.id, {
             id: d.id,
             fromPhone: normP,
-            memberName: matched?.name || data.profileName || 'Unknown / Guest',
-            memberId: matched?.memberId || '—',
-            memberStatus: matched?.status || '—',
+            memberName: data.profileName || 'Unknown / Guest',
+            memberId: '—',
+            memberStatus: '—',
             body: String(data.body || ''),
             createdAt: String(data.createdAt || new Date().toISOString()),
           });
@@ -1097,19 +1091,66 @@ export function createMessagingBroadcastRouter(
           for (const m of inboundMsgs) {
             const rawFrom = String(m.from || '').replace(/^whatsapp:/i, '');
             const normP = normalizeBroadcastPhone(rawFrom) || rawFrom;
-            const matched = phoneToMember.get(normP);
+            if (normP) phonesNeeded.add(normP);
             repliesMap.set(m.sid, {
               id: m.sid,
               fromPhone: normP,
-              memberName: matched?.name || 'Member / Test Phone',
-              memberId: matched?.memberId || '—',
-              memberStatus: matched?.status || '—',
+              memberName: 'Member / Test Phone',
+              memberId: '—',
+              memberStatus: '—',
               body: String(m.body || ''),
               createdAt: m.date_sent
                 ? new Date(m.date_sent).toISOString()
                 : new Date().toISOString(),
             });
           }
+        }
+      }
+
+      // 3. Indexed phone lookup ONLY for unique sender phones instead of scanning all 10k+ clients
+      const phoneToMember = new Map<
+        string,
+        { name: string; memberId: string; status: string }
+      >();
+      const queryPhoneVariants = new Set<string>();
+      for (const normP of phonesNeeded) {
+        queryPhoneVariants.add(normP);
+        if (normP.startsWith('+20')) {
+          queryPhoneVariants.add(normP.slice(1));
+          queryPhoneVariants.add('0' + normP.slice(3));
+        }
+      }
+      const phoneList = Array.from(queryPhoneVariants);
+      const clientQueries: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
+      for (let i = 0; i < phoneList.length; i += 10) {
+        const chunk = phoneList.slice(i, i + 10);
+        clientQueries.push(ctx.db.collection('clients').where('normalized_phone', 'in', chunk).get());
+        clientQueries.push(ctx.db.collection('clients').where('phone', 'in', chunk).get());
+      }
+      const clientSnaps = await Promise.all(clientQueries);
+      for (const s of clientSnaps) {
+        s.forEach((docSnap) => {
+          const d = docSnap.data();
+          const p =
+            normalizeBroadcastPhone(d.phone) ||
+            normalizeBroadcastPhone(d.normalized_phone) ||
+            normalizeBroadcastPhone(d.backupPhone);
+          if (p) {
+            phoneToMember.set(p, {
+              name: String(d.name || 'Member').trim(),
+              memberId: String(d.barcode || d.memberId || d.customId || d.code || '').trim(),
+              status: String(d.status || 'Active').trim(),
+            });
+          }
+        });
+      }
+
+      for (const reply of repliesMap.values()) {
+        const matched = phoneToMember.get(reply.fromPhone);
+        if (matched) {
+          reply.memberName = matched.name;
+          reply.memberId = matched.memberId || '—';
+          reply.memberStatus = matched.status;
         }
       }
 

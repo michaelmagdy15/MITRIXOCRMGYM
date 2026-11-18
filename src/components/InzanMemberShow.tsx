@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Client, Payment, Attendance, User, Package } from '../types';
-import { getInzanMemberCodeMeta, getPreferredMemberCode } from '../constants';
+import { getInzanMemberCodeMeta, getPreferredMemberCode, getMemberCodeSearchVariants } from '../constants';
+import { getEgyptPhoneVariants, normalizeEgyptPhone } from '../utils/phoneUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,7 +25,7 @@ import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
 import { db } from '../firebase';
 import { uploadTenantAsset, resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../services/storageService';
-import { collection, query, where, onSnapshot, addDoc, orderBy, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, orderBy, limit, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
 import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft, Gift, Sparkles, ShieldCheck, Edit3, RefreshCw, UserPlus } from 'lucide-react';
@@ -112,7 +113,7 @@ export function InzanMemberShow({
   setRenewPkgName,
   setRenewStartDate
 }: InzanMemberShowProps) {
-  const { createClientAccount, resetClientPortalPassword } = useAppContext();
+  const { createClientAccount, resetClientPortalPassword, allClients: ctxAllClients } = useAppContext();
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
     if (typeof window === 'undefined') return 'member_data';
     const sec = new URLSearchParams(window.location.search).get('section') as TabType | null;
@@ -769,17 +770,63 @@ export function InzanMemberShow({
     }
     setIsTransferringPkg(true);
     try {
-      const qTerm = transferTargetQuery.trim().toLowerCase().replace(/^#/, '');
-      const snap = await getDocs(collection(db, 'clients'));
-      const allClients = snap.docs.map(d => ({ ...d.data(), id: d.id } as Client));
-      const targetClient = allClients.find(c =>
-        c.id !== client.id && (
+      const rawTrimmed = transferTargetQuery.trim().replace(/^#/, '');
+      const qTerm = rawTrimmed.toLowerCase();
+      const digitsTerm = qTerm.replace(/\D/g, '');
+      const matchesCandidate = (c: any): boolean => {
+        if (!c || c.id === client.id) return false;
+        const prefCode = getPreferredMemberCode(c, true).toLowerCase();
+        return (
           String(c.memberId || '').toLowerCase() === qTerm ||
-          String(c.id).toLowerCase() === qTerm ||
-          (c.phone != null && String(c.phone).replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
-          (c.name != null && String(c.name).toLowerCase() === qTerm)
-        )
-      );
+          String(c.barcode || '').toLowerCase() === qTerm ||
+          prefCode === qTerm ||
+          String(c.id || '').toLowerCase() === qTerm ||
+          (c.phone != null && digitsTerm.length >= 6 && String(c.phone).replace(/\D/g, '').includes(digitsTerm)) ||
+          (c.name != null && String(c.name).trim().toLowerCase() === qTerm)
+        );
+      };
+
+      // 1. Resolve from already-loaded in-memory clients first (0 Firestore reads)
+      let targetClient: Client | undefined = (ctxAllClients || []).find(matchesCandidate);
+
+      // 2. Fallback to targeted indexed Firestore queries (never scan full 10k+ clients collection)
+      if (!targetClient) {
+        const candidates = new Map<string, Client>();
+        const addSnap = (s: any) => {
+          s?.docs?.forEach((d: any) => candidates.set(d.id, { ...d.data(), id: d.id } as Client));
+        };
+        const codeVariants = getMemberCodeSearchVariants(rawTrimmed).slice(0, 10);
+        const queries: Promise<any>[] = [];
+        if (rawTrimmed && !rawTrimmed.includes('/')) {
+          queries.push(
+            getDoc(doc(db, 'clients', rawTrimmed))
+              .then((snap) => {
+                if (snap.exists()) candidates.set(snap.id, { ...snap.data(), id: snap.id } as Client);
+              })
+              .catch(() => {})
+          );
+        }
+        if (codeVariants.length > 0) {
+          queries.push(getDocs(query(collection(db, 'clients'), where('barcode', 'in', codeVariants), limit(5))).then(addSnap).catch(() => {}));
+          queries.push(getDocs(query(collection(db, 'clients'), where('memberId', 'in', codeVariants), limit(5))).then(addSnap).catch(() => {}));
+          queries.push(getDocs(query(collection(db, 'clients'), where('secondaryBarcodes', 'array-contains-any', codeVariants), limit(5))).then(addSnap).catch(() => {}));
+        }
+        if (/^\d+$/.test(rawTrimmed)) {
+          queries.push(getDocs(query(collection(db, 'clients'), where('memberId', '==', Number(rawTrimmed)), limit(5))).then(addSnap).catch(() => {}));
+        }
+        if (digitsTerm.length >= 6) {
+          const phoneVars = getEgyptPhoneVariants(rawTrimmed).slice(0, 10);
+          const normPhone = normalizeEgyptPhone(rawTrimmed);
+          if (phoneVars.length > 0) {
+            queries.push(getDocs(query(collection(db, 'clients'), where('phone', 'in', phoneVars), limit(5))).then(addSnap).catch(() => {}));
+          }
+          if (normPhone) {
+            queries.push(getDocs(query(collection(db, 'clients'), where('normalized_phone', '==', normPhone), limit(5))).then(addSnap).catch(() => {}));
+          }
+        }
+        await Promise.all(queries);
+        targetClient = Array.from(candidates.values()).find((c) => c.id !== client.id);
+      }
       if (!targetClient) {
         toast.error(`No matching recipient member found for "${transferTargetQuery}". Try their exact Member ID or Phone.`);
         setIsTransferringPkg(false);

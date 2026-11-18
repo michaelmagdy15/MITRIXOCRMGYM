@@ -4,7 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { db, getTenantId } from '../firebase';
 import { 
   doc, getDoc, setDoc, updateDoc, addDoc, 
-  collection, query, where, onSnapshot, getDocs 
+  collection, query, where, onSnapshot, getDocs, limit 
 } from 'firebase/firestore';
 import { 
   CoachSchedule as CoachScheduleType, Session, SessionType, SessionStatus, Client,
@@ -177,11 +177,16 @@ export default function CoachSchedule({
     return () => unsub();
   }, [currentUser?.id]);
 
-  // 3. Fetch clients for assignment
+  // 3. Fetch active clients for assignment (avoid full archive scan on Spark)
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const snap = await getDocs(collection(db, 'clients'));
+        const isInzan = getTenantId().toLowerCase().includes('inzan');
+        const activeStatuses = ['Active', 'Hold', 'Nearly Expired', 'active', 'hold', 'nearly expired', 'Frozen', 'frozen'];
+        const q = isInzan
+          ? query(collection(db, 'clients'), where('status', 'in', activeStatuses), limit(600))
+          : query(collection(db, 'clients'), where('status', 'in', activeStatuses));
+        const snap = await getDocs(q);
         const list = snap.docs.map(d => ({ ...d.data(), id: d.id } as Client));
         list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setClients(list);

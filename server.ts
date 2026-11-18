@@ -28,6 +28,7 @@ import {
 } from './src/utils/tenantDb.js';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob, runNoShowScan } from './src/jobs/noShowJob.js';
+import { runClassRemindersScan } from './src/jobs/classReminderJob.js';
 import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus, toEndOfDayMs } from './src/jobs/membershipExpirationJob.js';
 import { isStandaloneMode } from './src/config/environment.js';
 import {
@@ -652,6 +653,26 @@ async function startServer() {
       res.json({ status: "success", message: "No-show scan completed" });
     } catch (err: any) {
       console.error("[Cron API] Error running no-show scan:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Authenticated Cron trigger for Class Reminders (90-150 min pre-class)
+  app.post("/api/cron/class-reminders", async (req, res) => {
+    try {
+      const cronSecret = process.env.CRON_SECRET;
+      if (process.env.NODE_ENV === 'production' && !cronSecret) {
+        res.status(401).json({ error: "CRON_SECRET not configured" });
+        return;
+      }
+      if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
+        res.status(401).json({ error: "Unauthorized cron trigger" });
+        return;
+      }
+      const result = await runClassRemindersScan();
+      res.json({ status: "success", ...result });
+    } catch (err: any) {
+      console.error("[Cron API] Error running class reminders:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1742,6 +1763,173 @@ async function startServer() {
     } catch (error) {
       console.error("[API] Error resolving member email:", error);
       return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Shared sliding-window IP rate limiter for unauthenticated public member endpoints
+  const publicEndpointRateMap = new Map<string, number[]>();
+  const getClientIpKey = (req: express.Request): string =>
+    String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip || '')
+      .split(',')[0]!
+      .trim() || 'unknown';
+  const checkPublicRateLimit = (scope: string, req: express.Request, maxHits: number, windowMs: number): boolean => {
+    const key = `${scope}:${getClientIpKey(req)}`;
+    const now = Date.now();
+    const hits = (publicEndpointRateMap.get(key) || []).filter((ts) => now - ts < windowMs);
+    if (hits.length >= maxHits) {
+      publicEndpointRateMap.set(key, hits);
+      return false;
+    }
+    hits.push(now);
+    publicEndpointRateMap.set(key, hits);
+    if (publicEndpointRateMap.size > 2000) {
+      for (const [k, v] of publicEndpointRateMap.entries()) {
+        if (!v.some((ts) => now - ts < windowMs)) publicEndpointRateMap.delete(k);
+      }
+    }
+    return true;
+  };
+
+  // Public rate-limited member password reset request (creates approval request for reception/admin)
+  app.post("/api/member/request-password-reset", async (req, res) => {
+    if (!checkPublicRateLimit('pwd_reset', req, 10, 15 * 60 * 1000)) {
+      return res.status(429).json({ error: "Too many reset requests. Please try again in 15 minutes." });
+    }
+    const rawMemberId = String(req.body?.memberId || '').trim();
+    const rawPhone = String(req.body?.phone || '').trim();
+    const rawEmail = String(req.body?.email || '').trim();
+    if (!rawMemberId || !rawPhone) {
+      return res.status(400).json({ error: "Member ID and phone number are required." });
+    }
+
+    try {
+      const db = await getDbForRequest(req);
+      const clientDoc = await findClientDocByCodeOrId(db, rawMemberId);
+      if (!clientDoc || !clientDoc.exists) {
+        return res.status(400).json({ error: "Could not verify Member ID and phone number. Please contact reception." });
+      }
+      const clientData = clientDoc.data() || {};
+      const inputDigits = rawPhone.replace(/\D/g, '');
+      const tailInput = inputDigits.slice(-9);
+      const knownPhones = [clientData.phone, clientData.normalized_phone, clientData.backupPhone]
+        .filter(Boolean)
+        .map((p: any) => String(p).replace(/\D/g, ''));
+      const phoneMatches =
+        inputDigits.length >= 8 &&
+        knownPhones.some((kp) => kp.length >= 8 && (kp === inputDigits || kp.slice(-9) === tailInput));
+
+      if (!phoneMatches) {
+        return res.status(400).json({ error: "Could not verify Member ID and phone number. Please contact reception." });
+      }
+
+      const existingReqs = await db
+        .collection("passwordResetRequests")
+        .where("clientDocId", "==", clientDoc.id)
+        .limit(5)
+        .get();
+      if (existingReqs.docs.some((d) => String(d.data()?.status || '').toLowerCase() === 'pending')) {
+        return res.json({ ok: true, deduplicated: true });
+      }
+
+      const preferredCode = resolvePreferredMemberCode(clientData, rawMemberId);
+      await db.collection("passwordResetRequests").add({
+        clientDocId: clientDoc.id,
+        memberId: preferredCode,
+        name: String(clientData.name || ''),
+        phone: rawPhone,
+        email: rawEmail || String(clientData.authEmail || clientData.email || '').trim(),
+        requestedAt: new Date().toISOString(),
+        status: 'pending',
+        type: 'member',
+      });
+
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("[API] Error creating member password reset request:", error);
+      return res.status(500).json({ error: (error as Error).message || "Failed to submit password reset request." });
+    }
+  });
+
+  // Public rate-limited member self check-in with daily kiosk PIN
+  app.post("/api/attendance/self-checkin", async (req, res) => {
+    if (!checkPublicRateLimit('self_checkin', req, 20, 5 * 60 * 1000)) {
+      return res.status(429).json({ success: false, message: "Too many check-in attempts. Please ask reception." });
+    }
+    const rawIdentifier = String(req.body?.identifier || '').trim();
+    const rawPin = String(req.body?.pin || '').trim();
+    const rawBranch = String(req.body?.branch || '').trim();
+    if (!rawIdentifier || !rawPin) {
+      return res.status(400).json({ success: false, message: "Member ID/phone and daily PIN are required." });
+    }
+
+    try {
+      const db = await getDbForRequest(req);
+      const brandingSnap = await db.collection("settings").doc("branding").get();
+      const expectedPin = String(brandingSnap.data()?.dailyCheckinPin || '').trim();
+      if (!expectedPin || rawPin !== expectedPin) {
+        return res.json({ success: false, message: "Invalid daily check-in PIN." });
+      }
+
+      let clientDoc = await findClientDocByCodeOrId(db, rawIdentifier);
+      if (!clientDoc) {
+        const digits = rawIdentifier.replace(/\D/g, '');
+        if (digits.length >= 8) {
+          const phoneVars = Array.from(new Set([
+            rawIdentifier,
+            digits,
+            digits.startsWith('01') ? `+2${digits}` : '',
+            digits.startsWith('01') ? `2${digits}` : '',
+            digits.startsWith('201') ? `0${digits.slice(2)}` : '',
+            digits.startsWith('201') ? `+${digits}` : '',
+          ].filter(Boolean))).slice(0, 10);
+          const phoneSnap = await db.collection("clients").where("phone", "in", phoneVars).limit(1).get();
+          if (!phoneSnap.empty) clientDoc = phoneSnap.docs[0]!;
+        }
+      }
+
+      if (!clientDoc || !clientDoc.exists) {
+        return res.json({ success: false, message: "Member account not found." });
+      }
+
+      const clientData = clientDoc.data() || {};
+      const effStatus = getEffectiveClientStatus(clientData);
+      if (effStatus === 'Expired' || effStatus === 'Frozen' || effStatus === 'Suspended') {
+        return res.json({ success: false, message: `Membership is ${effStatus.toLowerCase()}. Please see reception.` });
+      }
+
+      const lastCheckInMs = clientData.lastCheckIn ? new Date(clientData.lastCheckIn).getTime() : NaN;
+      if (!Number.isNaN(lastCheckInMs) && Date.now() - lastCheckInMs < 2 * 60 * 60 * 1000) {
+        return res.json({ success: false, message: "Already checked in recently." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const preferredCode = resolvePreferredMemberCode(clientData, String(clientData.memberId || clientDoc.id));
+      await db.collection("attendance").add({
+        clientId: clientDoc.id,
+        clientName: String(clientData.name || 'Member'),
+        memberId: preferredCode,
+        timestamp: nowIso,
+        date: nowIso.slice(0, 10),
+        branch: rawBranch || clientData.branch || 'Main',
+        source: 'self_checkin',
+      });
+
+      const clientUpdates: Record<string, any> = {
+        lastCheckIn: nowIso,
+        updatedAt: nowIso,
+      };
+      if (typeof clientData.sessionsRemaining === 'number' && clientData.sessionsRemaining > 0) {
+        clientUpdates.sessionsRemaining = Math.max(0, clientData.sessionsRemaining - 1);
+      }
+      await clientDoc.ref.set(clientUpdates, { merge: true });
+
+      return res.json({
+        success: true,
+        message: `Checked in! Welcome, ${clientData.name || 'Member'}.`,
+      });
+    } catch (error) {
+      console.error("[API] Error during member self-checkin:", error);
+      return res.status(500).json({ success: false, message: "Failed to record self check-in." });
     }
   });
 
@@ -3711,6 +3899,8 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
       const clientData = clientDoc.exists ? clientDoc.data() : null;
       const memberIdStr = clientData?.memberId || canonicalClientId;
 
+      let promotedPushPayload: { token: string; className: string; classId: string } | null = null;
+
       await db.runTransaction(async (transaction) => {
         // === 1. ALL READS FIRST ===
         const classDoc = await transaction.get(classRef);
@@ -3730,6 +3920,23 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
           .where("memberId", "==", canonicalClientId)
           .where("status", "==", "active");
         const entSnap = await transaction.get(entQuery);
+
+        // Pre-read first waitlisted member & their entitlements BEFORE any writes
+        let promotedIdCandidate: string | null = null;
+        let promotedClientSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+        let promotedEntSnap: FirebaseFirestore.QuerySnapshot | null = null;
+        if (action === 'leave') {
+          const candWaitlist: any[] = Array.isArray(classDoc.data()?.waitlist) ? classDoc.data()!.waitlist : [];
+          if (candWaitlist.length > 0 && candWaitlist[0]) {
+            promotedIdCandidate = String(candWaitlist[0]);
+            promotedClientSnap = await transaction.get(db.collection('clients').doc(promotedIdCandidate));
+            promotedEntSnap = await transaction.get(
+              db.collection('entitlements')
+                .where('memberId', '==', promotedIdCandidate)
+                .where('status', '==', 'active')
+            );
+          }
+        }
 
         // === 2. LOGIC & GUARDS (NO READS, NO WRITES) ===
         const classData = classDoc.data();
@@ -4107,14 +4314,134 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
             if (waitlist.length > 0 && !isWithinTwoHours) {
               const promotedId = waitlist.shift();
               if (promotedId) {
-                attendees.push(promotedId);
-                // Update promoted user status in classBookings
-                const promotedDocRef = db.collection("classBookings").doc(`${classId}_${promotedId}`);
-                transaction.set(promotedDocRef, {
-                  status: 'booked',
-                  promotedAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString()
-                }, { merge: true });
+                const promotedData = promotedId === promotedIdCandidate && promotedClientSnap?.exists
+                  ? promotedClientSnap.data() || {}
+                  : null;
+                const promotedStatus = promotedData ? getEffectiveClientStatus(promotedData) : 'Active';
+                const isEligibleForPromotion =
+                  promotedStatus !== 'Expired' &&
+                  promotedStatus !== 'Frozen' &&
+                  promotedStatus !== 'Suspended';
+
+                if (isEligibleForPromotion) {
+                  attendees.push(promotedId);
+                  const promoNowIso = new Date().toISOString();
+                  const promotedDocRef = db.collection("classBookings").doc(`${classId}_${promotedId}`);
+                  transaction.set(promotedDocRef, {
+                    status: 'booked',
+                    promotedAt: promoNowIso,
+                    updatedAt: promoNowIso
+                  }, { merge: true });
+
+                  // Deduct 1 session credit from promoted member's active class entitlement or fallback package
+                  const nowMsPromo = Date.now();
+                  let promoEntToDeduct: any = null;
+                  let promoEntRef: any = null;
+                  if (promotedId === promotedIdCandidate && promotedEntSnap) {
+                    for (const ed of promotedEntSnap.docs) {
+                      const eData = ed.data();
+                      if (eData.type !== 'class' && eData.type !== 'all') continue;
+                      if (eData.validUntil && toEndOfDayMs(eData.validUntil) < nowMsPromo) continue;
+                      if (eData.sessionsTotal !== 'unlimited' && eData.sessionsUsed >= eData.sessionsTotal) continue;
+                      promoEntToDeduct = eData;
+                      promoEntRef = ed.ref;
+                      break;
+                    }
+                  }
+
+                  if (promoEntToDeduct && promoEntRef) {
+                    if (promoEntToDeduct.sessionsTotal !== 'unlimited') {
+                      transaction.update(promoEntRef, {
+                        sessionsUsed: promoEntToDeduct.sessionsUsed + 1,
+                        updatedAt: promoNowIso,
+                      });
+                    }
+                    const promoAdjRef = db.collection(`entitlements/${promoEntRef.id}/adjustments`).doc();
+                    transaction.set(promoAdjRef, {
+                      entitlementId: promoEntRef.id,
+                      type: 'deduct',
+                      amount: 1,
+                      reason: `Waitlist Promoted: ${classData?.name || 'Workout Class'}`,
+                      performedBy: 'waitlist_promotion',
+                      createdAt: promoNowIso,
+                    });
+                  } else if (promotedId === promotedIdCandidate && promotedClientSnap?.exists && promotedData) {
+                    const promoPackages: any[] = Array.isArray(promotedData.packages) ? [...promotedData.packages] : [];
+                    for (let i = 0; i < promoPackages.length; i++) {
+                      const pkg = promoPackages[i];
+                      const pkgStatus = String(pkg.status || '').toLowerCase();
+                      if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
+                      if (pkg.endDate && toEndOfDayMs(pkg.endDate) < nowMsPromo) continue;
+                      const isPtPkg = pkg.type === 'pt' || pkg.isPT === true ||
+                        (pkg.name || '').toLowerCase().includes('pt') ||
+                        (pkg.packageName || '').toLowerCase().includes('pt') ||
+                        (pkg.name || '').toLowerCase().includes('private') ||
+                        (pkg.packageName || '').toLowerCase().includes('private');
+                      if (isPtPkg) continue;
+                      if (pkg.sessionsTotal !== 'unlimited' && typeof pkg.sessionsRemaining === 'number' && pkg.sessionsRemaining <= 0) continue;
+                      if (typeof pkg.sessionsRemaining === 'number' && pkg.sessionsTotal !== 'unlimited') {
+                        pkg.sessionsRemaining = Math.max(0, pkg.sessionsRemaining - 1);
+                        pkg.usedSessions = (pkg.usedSessions || 0) + 1;
+                      }
+                      break;
+                    }
+                    const promoUpdates: Record<string, any> = {
+                      packages: promoPackages,
+                      updatedAt: promoNowIso,
+                    };
+                    if (typeof promotedData.sessionsRemaining === 'number' && promotedData.sessionsRemaining > 0) {
+                      promoUpdates.sessionsRemaining = Math.max(0, promotedData.sessionsRemaining - 1);
+                      promoUpdates.usedSessions = (typeof promotedData.usedSessions === 'number' ? promotedData.usedSessions : 0) + 1;
+                    }
+                    transaction.update(promotedClientSnap.ref, promoUpdates);
+                  }
+
+                  const promoMemberName = promotedData?.name || promotedId;
+                  transaction.set(db.collection("auditLogs").doc(), {
+                    action: 'WAITLIST_PROMOTION',
+                    entityType: 'CLASS',
+                    entityId: classId,
+                    details: `Promoted ${promoMemberName} from waitlist to booked for ${classData?.name || 'Workout Class'}`,
+                    timestamp: promoNowIso,
+                    userId: promotedId,
+                    userName: promoMemberName,
+                  });
+
+                  transaction.set(db.collection("systemNotifications").doc(), buildSystemNotification({
+                    type: 'class_waitlist_promoted',
+                    title: 'Waitlist Member Promoted',
+                    body: `${promoMemberName} was promoted from waitlist into ${classData?.name || 'Workout Class'}.`,
+                    severity: 'success',
+                    data: {
+                      classId,
+                      clientId: promotedId,
+                      className: classData?.name || 'Workout Class',
+                      memberName: promoMemberName,
+                    },
+                  }));
+
+                  transaction.set(db.collection('clients').doc(promotedId).collection('notifications').doc(), {
+                    type: 'WAITLIST_PROMOTED',
+                    title: "You're in! Promoted from Waitlist",
+                    body: `A spot opened up in ${classData?.name || 'Workout Class'} and you are now booked!`,
+                    read: false,
+                    createdAt: promoNowIso,
+                    data: {
+                      classId,
+                      className: classData?.name || 'Workout Class',
+                      url: '/member/classes',
+                    },
+                  });
+
+                  const promoToken = promotedData?.expoPushToken;
+                  if (typeof promoToken === 'string' && promoToken.startsWith('ExponentPushToken')) {
+                    promotedPushPayload = {
+                      token: promoToken,
+                      className: classData?.name || 'Workout Class',
+                      classId,
+                    };
+                  }
+                }
               }
             }
           } else {
@@ -4152,6 +4479,24 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
           userName: req.user?.email || clientData?.name || "Member"
         });
       });
+
+      if (promotedPushPayload) {
+        const pushInfo: { token: string; className: string; classId: string } = promotedPushPayload;
+        fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Accept": "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: pushInfo.token,
+            title: "You're in! Promoted from Waitlist",
+            body: `A spot opened up in ${pushInfo.className} and you are now booked!`,
+            sound: "default",
+            priority: "high",
+            channelId: "member-alerts",
+            data: { type: "WAITLIST_PROMOTED", classId: pushInfo.classId, url: "/member/classes" },
+          }),
+          signal: AbortSignal.timeout(8000),
+        }).catch(() => {});
+      }
 
       return res.json({ success: true, message: `Class ${action} successful` });
     } catch (err: any) {
@@ -6355,7 +6700,34 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
   // payload regardless.
   app.post("/api/proxy-push", requireAuth, async (req, res) => {
     try {
-      const { messages } = req.body;
+      let messages: any[] | null = Array.isArray(req.body?.messages) ? req.body.messages : null;
+      if (!messages && req.body?.userId && req.body?.title) {
+        const db = await getDbForRequest(req);
+        const uid = String(req.body.userId).trim();
+        const [uSnap, cSnap] = await Promise.all([
+          db.collection("users").doc(uid).get().catch(() => null),
+          db.collection("clients").doc(uid).get().catch(() => null),
+        ]);
+        const tokens = Array.from(
+          new Set(
+            [uSnap?.data()?.expoPushToken, cSnap?.data()?.expoPushToken].filter(
+              (t): t is string => typeof t === "string" && t.startsWith("ExponentPushToken")
+            )
+          )
+        );
+        if (tokens.length === 0) {
+          return res.json({ data: [], skipped: true });
+        }
+        messages = tokens.map((to) => ({
+          to,
+          title: String(req.body.title),
+          body: String(req.body.body || ""),
+          sound: "default",
+          priority: "high",
+          data: req.body.data || {},
+        }));
+      }
+
       if (!messages || !Array.isArray(messages)) {
         return res.status(400).json({ error: "Missing or invalid 'messages' array in request body." });
       }

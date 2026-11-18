@@ -1,5 +1,5 @@
 import { runTransaction, doc, collection, query, where, getDocs, setDoc, addDoc } from 'firebase/firestore';
-import { db, getTenantId } from '../firebase';
+import { db, getTenantId, auth } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
@@ -223,9 +223,13 @@ export async function notifyCoachClientAssigned(params: {
 
   if (recipientUid && typeof window !== 'undefined' && 'fetch' in window) {
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       await fetch('/api/proxy-push', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           userId: recipientUid,
           title,

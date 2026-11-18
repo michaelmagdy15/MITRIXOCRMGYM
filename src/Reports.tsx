@@ -177,21 +177,6 @@ export default function Reports() {
     loadingHistoricalPayments,
   } = useAppContext();
 
-  useEffect(() => {
-    if (!expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
-      fetchExpiredMembers();
-    }
-    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
-      fetchHistoricalPayments();
-    }
-  }, [
-    expiredLoaded,
-    loadingExpired,
-    fetchExpiredMembers,
-    historicalPaymentsLoaded,
-    loadingHistoricalPayments,
-    fetchHistoricalPayments,
-  ]);
   const isInzan = getTenantId() === 'inzanathletics';
   const revenueScope = useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
 
@@ -200,8 +185,38 @@ export default function Reports() {
   const [selectedExplorerReport, setSelectedExplorerReport] = useState<ReportId>('expired-members');
 
   // Interactive Filters for Visual Analytics
-  const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | '30d' | '90d' | '12m'>('all');
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | '30d' | '90d' | '12m'>(() =>
+    isInzan ? '30d' : 'all'
+  );
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+
+  useEffect(() => {
+    const wantsExpired = !isInzan || (hubMode === 'explorer' && selectedExplorerReport === 'expired-members');
+    const wantsHistorical =
+      !isInzan ||
+      periodFilter === 'all' ||
+      periodFilter === '12m' ||
+      periodFilter === '90d' ||
+      hubMode === 'explorer';
+
+    if (wantsExpired && !expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
+      fetchExpiredMembers();
+    }
+    if (wantsHistorical && !historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+      fetchHistoricalPayments();
+    }
+  }, [
+    isInzan,
+    hubMode,
+    selectedExplorerReport,
+    periodFilter,
+    expiredLoaded,
+    loadingExpired,
+    fetchExpiredMembers,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
+  ]);
 
   const safeParseDate = (dateString: any): Date | null => {
     if (!dateString || typeof dateString !== 'string') return null;

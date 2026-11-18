@@ -77,8 +77,8 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
           .map(d => ({ ...d.data(), id: d.id } as Payment))
           .filter(p => !p.deleted_at || p.status === 'refunded');
 
-        // Fallback check for legacy docs missing a `date` field
-        if (docsList.length === 0 && recentPayments.length === 0) {
+        // Fallback check only for small/non-Inzan tenants missing indexed `date` field
+        if (!isTenantInzan() && docsList.length === 0 && recentPayments.length === 0) {
           const allSnap = await getDocs(collection(db, 'payments'));
           docsList = allSnap.docs
             .map(d => ({ ...d.data(), id: d.id } as Payment))

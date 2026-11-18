@@ -9,7 +9,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { CheckCircle2, Eye, EyeOff, Dumbbell, Flame, Target, Activity, Key, Phone, Mail, ShieldAlert } from 'lucide-react';
 import { addDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db, getTenantId } from '../firebase';
+import { db, getTenantId, storage } from '../firebase';
+import { isSparkStoragelessBucket } from '../services/storageService';
 import { Client } from '../types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -223,7 +224,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
       }
 
       // Send confirmation email via Firestore trigger
-      if (buyerEmail) {
+      if (buyerEmail && !isSparkStoragelessBucket(storage?.app?.options?.storageBucket)) {
         try {
           await addDoc(collection(db, 'mail'), {
             to: buyerEmail,

@@ -1093,7 +1093,7 @@ export default function AdminHub() {
               <CardContent className="space-y-3">
                 <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col gap-2">
                   <div className="text-xs text-emerald-300 font-semibold">
-                    Live Cloud Sync (Direct from inzan.redgits.com → db-inzanathletics)
+                    Live Cloud Sync (Direct from inzan.redgits.com → inzan-crm-spark-26)
                   </div>
                   <div>
                     <RedgitsLiveSyncDialog variant="admin-card" />

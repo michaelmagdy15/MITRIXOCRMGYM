@@ -237,9 +237,13 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
       console.error('[Push Service] Error saving to systemNotifications collection:', sysErr);
     }
 
-    // 3. Collect mobile app Expo push tokens
-    const clientsSnap = await getDocs(collection(db, 'clients'));
-    const usersSnap = await getDocs(collection(db, 'users'));
+    // 3. Collect mobile app Expo push tokens (query ONLY docs with a registered token)
+    const clientsSnap = await getDocs(
+      query(collection(db, 'clients'), where('expoPushToken', '>', ''))
+    );
+    const usersSnap = await getDocs(
+      query(collection(db, 'users'), where('expoPushToken', '>', ''))
+    );
 
     const tokensSet = new Set<string>();
 
