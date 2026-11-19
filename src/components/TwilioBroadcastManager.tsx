@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { auth, getTenantId } from '../firebase';
 import { useAppContext } from '../context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,8 +82,10 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   const defaultBrand = isInzan ? 'INZAN Athletics' : branding.companyName || 'STRIKE';
 
   // Configuration state
-  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [loadingConfig, setLoadingConfig] = useState(!compact);
+  const [compactExpanded, setCompactExpanded] = useState(!compact);
   const [showConfigPanel, setShowConfigPanel] = useState(!compact);
+  const pollingPausedRef = useRef(false);
   const [accountSid, setAccountSid] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [hasSavedToken, setHasSavedToken] = useState(false);
@@ -196,17 +198,38 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
     return headers;
   }, []);
 
-  const loadConfigAndCounts = useCallback(async () => {
+  const loadConfigAndCounts = useCallback(async (forceOrEvent: boolean | { forceRefresh?: boolean } | unknown = false) => {
+    const forceRefresh = forceOrEvent === true || (typeof forceOrEvent === 'object' && forceOrEvent !== null && 'forceRefresh' in forceOrEvent && Boolean((forceOrEvent as { forceRefresh?: boolean }).forceRefresh));
+    const headers = await getAuthHeaders();
+    const headerMap = headers as Record<string, string | undefined>;
+    if (!headerMap.Authorization && !headerMap.authorization) {
+      setLoadingConfig(false);
+      return;
+    }
+    if (forceRefresh) {
+      pollingPausedRef.current = false;
+    }
     setLoadingConfig(true);
     try {
-      const headers = await getAuthHeaders();
-      const query = branchFilter !== 'ALL' ? `?branch=${encodeURIComponent(branchFilter)}` : '';
+      const params = new URLSearchParams();
+      if (branchFilter !== 'ALL') params.set('branch', branchFilter);
+      if (forceRefresh) params.set('refresh', '1');
+      const qs = params.toString();
+      const query = qs ? `?${qs}` : '';
+      const refreshQuery = forceRefresh ? '?refresh=1' : '';
       const [cfgRes, histRes, repRes, liveRes] = await Promise.all([
         fetch(`/api/messaging/config${query}`, { headers }),
-        fetch('/api/messaging/history', { headers }),
-        fetch('/api/messaging/replies', { headers }),
-        fetch('/api/messaging/live-status', { headers }),
+        fetch(`/api/messaging/history${refreshQuery}`, { headers }),
+        fetch(`/api/messaging/replies${refreshQuery}`, { headers }),
+        fetch(`/api/messaging/live-status${refreshQuery}`, { headers }),
       ]);
+      const statuses = [cfgRes.status, histRes.status, repRes.status, liveRes.status];
+      if (statuses.some((s) => s === 401 || s === 403 || s === 503 || s === 500)) {
+        pollingPausedRef.current = true;
+      }
+      if (statuses.every((s) => s === 401 || s === 403 || s === 503)) {
+        return;
+      }
 
       if (cfgRes.ok) {
         const data = await cfgRes.json();
@@ -253,12 +276,19 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   }, [branchFilter, defaultBrand, getAuthHeaders, isInzan]);
 
   useEffect(() => {
+    if (compact && !compactExpanded) {
+      setLoadingConfig(false);
+      return;
+    }
+    pollingPausedRef.current = false;
     loadConfigAndCounts();
     const timer = setInterval(() => {
+      if (pollingPausedRef.current) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       loadConfigAndCounts();
-    }, 60000);
+    }, 5 * 60_000);
     return () => clearInterval(timer);
-  }, [loadConfigAndCounts]);
+  }, [loadConfigAndCounts, compact, compactExpanded]);
 
   const handleSaveConfig = async () => {
     if (!accountSid.trim()) {
@@ -512,6 +542,30 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   };
 
   const utilityTemplateCopyText = `🏋️ *INZAN Athletics — Official Member Notice*\n\nHello {{1}},\n\n{{2}}\n\nThank you,\nINZAN Athletics Management`;
+
+  if (compact && !compactExpanded) {
+    return (
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold">Broadcast & Messaging Center</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              WhatsApp & SMS campaigns are loaded on demand to save quota and speed up Dashboard loading.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setCompactExpanded(true)}
+            className="shrink-0 font-semibold"
+          >
+            Open Broadcast Manager
+          </Button>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1343,7 +1397,7 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={loadConfigAndCounts}
+                    onClick={() => loadConfigAndCounts(true)}
                     disabled={loadingConfig}
                     className="h-7 px-2"
                   >

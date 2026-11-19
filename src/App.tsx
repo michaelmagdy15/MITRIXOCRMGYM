@@ -149,6 +149,64 @@ const PortalLoadingFallback: React.FC = () => {
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
 
+interface HeaderSearchInputProps {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  onSubmitSearch: (q: string) => void;
+  placeholder: string;
+}
+
+const HeaderSearchInput: React.FC<HeaderSearchInputProps> = React.memo(({
+  searchQuery,
+  setSearchQuery,
+  onSubmitSearch,
+  placeholder,
+}) => {
+  const [localInput, setLocalInput] = React.useState(searchQuery);
+  const isDirtyRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!isDirtyRef.current && searchQuery !== localInput) {
+      setLocalInput(searchQuery);
+    }
+    // Only sync on external searchQuery changes; avoid racing against live local typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    if (!isDirtyRef.current) return;
+    const timer = window.setTimeout(() => {
+      isDirtyRef.current = false;
+      setSearchQuery(localInput);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [localInput, setSearchQuery]);
+
+  return (
+    <div className="relative w-full">
+      <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        type="search"
+        placeholder={placeholder}
+        className="w-full ps-9 bg-muted/50 border-none"
+        value={localInput}
+        onChange={(e) => {
+          isDirtyRef.current = true;
+          setLocalInput(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            isDirtyRef.current = false;
+            onSubmitSearch(localInput);
+          }
+        }}
+      />
+    </div>
+  );
+});
+HeaderSearchInput.displayName = 'HeaderSearchInput';
+
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData, loadingClients, loadingPayments, loadingPackages, can, canAny } = useAppContext();
@@ -193,6 +251,8 @@ function AppContent() {
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
   const [storeInitialPackageId, setStoreInitialPackageId] = React.useState<string | null>(null);
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
+  const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = React.useState(false);
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
   const [visitedCoreTabs, setVisitedCoreTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
@@ -206,25 +266,14 @@ function AppContent() {
       });
     }
   }, [activeTab]);
-  const [localSearchInput, setLocalSearchInput] = React.useState(searchQuery);
-  const isLocalSearchDirtyRef = React.useRef(false);
 
-  // Sync external searchQuery resets (e.g. clicking Clear or Notifications) into header input
   React.useEffect(() => {
-    if (!isLocalSearchDirtyRef.current && searchQuery !== localSearchInput) {
-      setLocalSearchInput(searchQuery);
-    }
-  }, [searchQuery]);
+    setLogoLoadFailed(false);
+  }, [branding.logoUrl]);
 
-  // Debounce pushing localSearchInput into global searchQuery so typing stays at 60fps
   React.useEffect(() => {
-    if (!isLocalSearchDirtyRef.current) return;
-    const timer = window.setTimeout(() => {
-      isLocalSearchDirtyRef.current = false;
-      setSearchQuery(localSearchInput);
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [localSearchInput, setSearchQuery]);
+    setAvatarLoadFailed(false);
+  }, [currentUser?.photoURL]);
 
   // If user logs in while checkout is open, keep them in the store view so they can complete the checkout!
   React.useEffect(() => {
@@ -247,7 +296,14 @@ function AppContent() {
   React.useEffect(() => {
     const handleNotificationTabCounts = (event: Event) => {
       const detail = (event as CustomEvent<Record<string, number>>).detail || {};
-      setNotificationTabCounts(detail);
+      setNotificationTabCounts((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(detail);
+        if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === detail[k])) {
+          return prev;
+        }
+        return detail;
+      });
     };
 
     window.addEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
@@ -285,7 +341,6 @@ function AppContent() {
   const handleSearchSubmit = (overrideQuery?: string) => {
     const activeQ = overrideQuery !== undefined ? overrideQuery : searchQuery;
     if (overrideQuery !== undefined && overrideQuery !== searchQuery) {
-      isLocalSearchDirtyRef.current = false;
       setSearchQuery(overrideQuery);
     }
     if (!activeQ.trim()) return;
@@ -365,6 +420,12 @@ function AppContent() {
       setSearchFallbackOpen(true);
     }
   };
+
+  const handleSearchSubmitRef = React.useRef(handleSearchSubmit);
+  handleSearchSubmitRef.current = handleSearchSubmit;
+  const triggerHeaderSearchSubmit = React.useCallback((q: string) => {
+    handleSearchSubmitRef.current(q);
+  }, []);
 
   // Monitor URL changes for kiosk mode
   React.useEffect(() => {
@@ -1125,12 +1186,13 @@ function AppContent() {
               }`}
               onClick={() => setActiveTab('dashboard')}
             >
-              {branding.logoUrl ? (
+              {branding.logoUrl && !logoLoadFailed ? (
                 <img 
                   src={branding.logoUrl} 
                   alt={branding.companyName} 
                   className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
+                  onError={() => setLogoLoadFailed(true)}
                 />
               ) : (
                 <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold truncate max-w-[150px]">
@@ -1140,7 +1202,7 @@ function AppContent() {
             </div>
             
             {/* Collapsed Logo */}
-            {branding.logoUrl && (
+            {branding.logoUrl && !logoLoadFailed && (
               <div 
                 className={`transition-all duration-300 absolute left-1/2 -translate-x-1/2 top-4 cursor-pointer hover:opacity-85 transition-opacity ${
                   isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
@@ -1152,6 +1214,7 @@ function AppContent() {
                   alt="Logo" 
                   className={`h-8 w-8 object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
+                  onError={() => setLogoLoadFailed(true)}
                 />
               </div>
             )}
@@ -1217,12 +1280,13 @@ function AppContent() {
                 onClick={() => setActiveTab('settings')}
                 title="My Profile"
               >
-                {currentUser.photoURL ? (
+                {currentUser.photoURL && !avatarLoadFailed ? (
                   <img
                     src={currentUser.photoURL}
                     alt={currentUser.name}
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
+                    onError={() => setAvatarLoadFailed(true)}
                   />
                 ) : (
                   <span className="text-xs font-bold text-primary select-none">
@@ -1288,12 +1352,13 @@ function AppContent() {
                 setIsMobileSidebarOpen(false);
               }}
             >
-              {branding.logoUrl ? (
+              {branding.logoUrl && !logoLoadFailed ? (
                 <img 
                   src={branding.logoUrl} 
                   alt={branding.companyName} 
                   className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
+                  onError={() => setLogoLoadFailed(true)}
                 />
               ) : (
                 <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">
@@ -1352,12 +1417,13 @@ function AppContent() {
               <div
                 className="h-9 w-9 rounded-full overflow-hidden flex-shrink-0 border border-primary/30 bg-primary/10 flex items-center justify-center"
               >
-                {currentUser.photoURL ? (
+                {currentUser.photoURL && !avatarLoadFailed ? (
                   <img
                     src={currentUser.photoURL}
                     alt={currentUser.name}
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
+                    onError={() => setAvatarLoadFailed(true)}
                   />
                 ) : (
                   <span className="text-sm font-bold text-primary select-none">
@@ -1420,12 +1486,13 @@ function AppContent() {
                 className="md:hidden flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity"
                 onClick={() => setActiveTab('dashboard')}
               >
-                {branding.logoUrl ? (
+                {branding.logoUrl && !logoLoadFailed ? (
                   <img 
                     src={branding.logoUrl} 
                     alt={branding.companyName} 
                     className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                     referrerPolicy="no-referrer"
+                    onError={() => setLogoLoadFailed(true)}
                   />
                 ) : (
                   <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">
@@ -1435,23 +1502,12 @@ function AppContent() {
               </div>
 
               {/* Desktop search bar */}
-              <div className="hidden md:flex relative w-full max-w-sm">
-                <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
+              <div className="hidden md:flex w-full max-w-sm">
+                <HeaderSearchInput
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  onSubmitSearch={triggerHeaderSearchSubmit}
                   placeholder={t('header.search_placeholder')}
-                  className="w-full ps-9 bg-muted/50 border-none"
-                  value={localSearchInput}
-                  onChange={(e) => {
-                    isLocalSearchDirtyRef.current = true;
-                    setLocalSearchInput(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSearchSubmit(localSearchInput);
-                    }
-                  }}
                 />
               </div>
 
@@ -1520,12 +1576,13 @@ function AppContent() {
                   onClick={() => setIsMobileSidebarOpen(true)}
                   title="Open menu"
                 >
-                  {currentUser.photoURL ? (
+                  {currentUser.photoURL && !avatarLoadFailed ? (
                     <img
                       src={currentUser.photoURL}
                       alt={currentUser.name}
                       className="h-full w-full object-cover"
                       referrerPolicy="no-referrer"
+                      onError={() => setAvatarLoadFailed(true)}
                     />
                   ) : (
                     <span className="text-xs font-bold text-primary select-none">
@@ -1559,25 +1616,12 @@ function AppContent() {
 
           {/* Mobile search bar if toggled */}
           <div id="mobile-search" className="hidden md:hidden bg-card border-b p-2 flex-shrink-0">
-            <div className="relative w-full">
-              <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder={t('header.search_placeholder')}
-                className="w-full ps-9 bg-muted/50 border-none"
-                value={localSearchInput}
-                onChange={(e) => {
-                  isLocalSearchDirtyRef.current = true;
-                  setLocalSearchInput(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSearchSubmit(localSearchInput);
-                  }
-                }}
-              />
-            </div>
+            <HeaderSearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSubmitSearch={triggerHeaderSearchSubmit}
+              placeholder={t('header.search_placeholder')}
+            />
           </div>
 
           {/* Main scrollable viewport */}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useDeferredValue, memo } from 'react';
 import type { Html5Qrcode } from 'html5-qrcode';
 import { useAppContext } from './context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -108,7 +108,7 @@ import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
 import { resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from './services/storageService';
 import { isSalesRepOnly } from './utils/permissions';
 
-export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
+function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
     currentUser,
     users,
@@ -173,7 +173,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const [classes, setClasses] = useState<any[]>([]);
   useEffect(() => {
-    const q = query(collection(db, 'classSchedules'));
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const q = query(collection(db, 'classSchedules'), where('date', '>=', thirtyDaysAgoStr));
     const unsub = onSnapshot(q, (snap) => {
       setClasses(snap.docs.map(doc => {
         const data = doc.data();
@@ -205,6 +206,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [quickAddSessionId, setQuickAddSessionId] = useState('');
   const [quickAddMemberId, setQuickAddMemberId] = useState('');
   const [quickAddSearch, setQuickAddSearch] = useState('');
+  const deferredRosterSearch = useDeferredValue(rosterSearch);
+  const deferredQuickAddSearch = useDeferredValue(quickAddSearch);
   const [actionLoadingAttendeeId, setActionLoadingAttendeeId] = useState<string | null>(null);
   const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
 
@@ -493,8 +496,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     let result = Array.from(uniqueMap.values());
 
     // Search filter across multiple fields
-    if (rosterSearch.trim()) {
-      const q = rosterSearch.toLowerCase().trim();
+    if (deferredRosterSearch.trim()) {
+      const q = deferredRosterSearch.toLowerCase().trim();
       result = result.filter(item => 
         matchesFuzzyNameSearch(item.name, q) ||
         String(item.memberId || '').toLowerCase().includes(q) ||
@@ -527,7 +530,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     });
 
     return result;
-  }, [attendances, classes, ptPackageRecords, clientLookupMap, rosterDate, selectedSessionFilter, rosterSearch, searchScope, showLowCreditsOnly]);
+  }, [attendances, classes, ptPackageRecords, clientLookupMap, rosterDate, selectedSessionFilter, deferredRosterSearch, searchScope, showLowCreditsOnly]);
 
   // ─── RETROACTIVE & LIVE CHECK-IN HANDLERS ───
   const handleCheckInRosterItem = async (item: any) => {
@@ -3913,8 +3916,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <div className="max-h-48 overflow-y-auto rounded-lg border bg-background divide-y mt-1">
                 {clients
                   .filter(c => {
-                    if (!quickAddSearch.trim()) return true;
-                    const q = quickAddSearch.toLowerCase();
+                    if (!deferredQuickAddSearch.trim()) return true;
+                    const q = deferredQuickAddSearch.toLowerCase();
                     return String(c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q) || String(c.memberId || '').toLowerCase().includes(q);
                   })
                   .slice(0, 30)
@@ -4188,3 +4191,5 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     </div>
   );
 }
+
+export default memo(Attendance);

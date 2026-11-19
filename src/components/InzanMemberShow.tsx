@@ -23,7 +23,7 @@ import { openWhatsAppChat } from '../utils/whatsappTemplates';
 import { format } from 'date-fns';
 import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { uploadTenantAsset, resolveMemberPhotoUrl, getMemberPhotoFallbackUrl } from '../services/storageService';
 import { collection, query, where, onSnapshot, addDoc, orderBy, limit, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
@@ -273,10 +273,13 @@ export function InzanMemberShow({
   const [issuedPinOverride, setIssuedPinOverride] = useState<string | null>(null);
   const [lockerError, setLockerError] = useState<string | null>(null);
 
+  const lastFetchedLockerClientIdRef = React.useRef<string | null>(null);
+
   const loadMemberLockerStatus = React.useCallback(async (silent = false) => {
-    if (!client?.id) return;
+    if (!client?.id || !auth.currentUser) return;
     if (!silent) setIsLoadingLocker(true);
     setLockerError(null);
+    lastFetchedLockerClientIdRef.current = client.id;
     try {
       const res = await fetchMemberLockerStatus(client.id);
       setLockerStatus(res);
@@ -284,15 +287,22 @@ export function InzanMemberShow({
         setIssuedPinOverride(res.pin);
       }
     } catch (err: any) {
-      console.error('Failed to fetch member locker status:', err);
+      const status = typeof err?.status === 'number' ? err.status : undefined;
+      if (status === 401 || status === 403 || status === 503) {
+        console.warn(`Locker status unavailable (${status}):`, err?.message || err);
+      } else {
+        console.error('Failed to fetch member locker status:', err);
+      }
       setLockerError(err?.message || 'Unable to reach Smart Locker server.');
     } finally {
       if (!silent) setIsLoadingLocker(false);
     }
-  }, [client.id, activeTab]);
+  }, [client.id]);
 
   React.useEffect(() => {
     setIssuedPinOverride(null);
+    if (!client?.id || !auth.currentUser) return;
+    if (lastFetchedLockerClientIdRef.current === client.id) return;
     loadMemberLockerStatus();
   }, [client.id, loadMemberLockerStatus]);
 

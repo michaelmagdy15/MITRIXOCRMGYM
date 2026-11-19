@@ -228,7 +228,7 @@ const SalesTargetDialog = React.memo(function SalesTargetDialog({
   );
 });
 
-export default function Dashboard() {
+function Dashboard() {
   const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, can, branches, branding, allClients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId, updateClient } = useAppContext();
   const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
@@ -1993,5 +1993,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
+export default React.memo(Dashboard);
 
 

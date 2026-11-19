@@ -4,6 +4,7 @@ import {
   getTenantIdForRequest,
 } from '../utils/tenantDb.js';
 import { convertArabicNumerals } from '../utils/phoneUtils.js';
+import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota.js';
 
 export type BroadcastChannel = 'whatsapp' | 'sms';
 export type BroadcastAudience =
@@ -474,6 +475,22 @@ export function createMessagingBroadcastRouter(
 ): express.Router {
   const router = express.Router();
 
+  const MESSAGING_CACHE_TTL_MS = 5 * 60_000;
+  const configResponseCache = new Map<string, { payload: any; expiresAt: number }>();
+  const historyResponseCache = new Map<string, { payload: any; expiresAt: number }>();
+  const repliesResponseCache = new Map<string, { payload: any; expiresAt: number }>();
+  const liveStatusResponseCache = new Map<string, { payload: any; expiresAt: number }>();
+
+  const invalidateMessagingCacheForTenant = (tenantId: string) => {
+    const prefix = `${tenantId}:`;
+    for (const k of configResponseCache.keys()) {
+      if (k.startsWith(prefix)) configResponseCache.delete(k);
+    }
+    historyResponseCache.delete(tenantId);
+    repliesResponseCache.delete(tenantId);
+    liveStatusResponseCache.delete(tenantId);
+  };
+
   const ensureAdminOrManager = async (
     req: express.Request,
     res: express.Response
@@ -490,16 +507,27 @@ export function createMessagingBroadcastRouter(
     const isSuper = callerEmail === 'michaelmitry13@gmail.com';
     let role = String(user.role || '').toLowerCase();
     let callerName = String(user.name || user.email || 'Admin');
+    const allowedRoles = ['admin', 'super_admin', 'crm_admin', 'manager', 'owner', 'sales_manager'];
 
-    if (!isSuper) {
-      const userDoc = await db.collection('users').doc(user.uid).get();
-      const userData = userDoc.data() || {};
-      role = String(userData.role || role).toLowerCase();
-      callerName = String(userData.name || callerName);
-      const allowedRoles = ['admin', 'super_admin', 'crm_admin', 'manager', 'owner', 'sales_manager'];
-      if (!allowedRoles.includes(role) && !userData.can_access_settings_and_history) {
-        res.status(403).json({ error: 'Forbidden: Only administrators and managers can manage broadcasts.' });
-        return null;
+    if (!isSuper && !allowedRoles.includes(role)) {
+      try {
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        const userData = userDoc.data() || {};
+        role = String(userData.role || role).toLowerCase();
+        callerName = String(userData.name || callerName);
+        if (!allowedRoles.includes(role) && !userData.can_access_settings_and_history) {
+          res.status(403).json({ error: 'Forbidden: Only administrators and managers can manage broadcasts.' });
+          return null;
+        }
+      } catch (err: any) {
+        if (isFirestoreQuotaOrUnavailableError(err)) {
+          res.status(503).json({
+            error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+            code: 'FIRESTORE_QUOTA_EXCEEDED',
+          });
+          return null;
+        }
+        throw err;
       }
     }
 
@@ -515,10 +543,20 @@ export function createMessagingBroadcastRouter(
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
 
-      const config = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
       const branchFilter = req.query.branch ? String(req.query.branch) : undefined;
       const normalizedBranch =
         branchFilter && branchFilter !== 'ALL' ? branchFilter.trim() : null;
+      const cacheKey = `${ctx.tenantId}:${normalizedBranch || 'ALL'}`;
+      const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+      const now = Date.now();
+      if (!forceRefresh) {
+        const cached = configResponseCache.get(cacheKey);
+        if (cached && cached.expiresAt > now) {
+          return res.json(cached.payload);
+        }
+      }
+
+      const config = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
 
       const baseClients = normalizedBranch
         ? ctx.db.collection('clients').where('branch', '==', normalizedBranch)
@@ -549,7 +587,7 @@ export function createMessagingBroadcastRouter(
         allContacts: allContactsCountSnap.data().count,
       };
 
-      return res.json({
+      const payload = {
         tenantId: ctx.tenantId,
         config: {
           accountSid: config.accountSid,
@@ -565,9 +603,17 @@ export function createMessagingBroadcastRouter(
         },
         audienceCounts: counts,
         pricingUsd: EGYPT_MESSAGING_RATES_USD,
-      });
+      };
+      configResponseCache.set(cacheKey, { payload, expiresAt: now + MESSAGING_CACHE_TTL_MS });
+      return res.json(payload);
     } catch (err: any) {
       console.error('[API Messaging] Error loading config:', err);
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
       return res.status(500).json({ error: err.message || 'Failed to load messaging config' });
     }
   });
@@ -619,6 +665,7 @@ export function createMessagingBroadcastRouter(
       };
 
       await ctx.db.collection('secrets_config').doc('twilio').set(updatedConfig, { merge: true });
+      invalidateMessagingCacheForTenant(ctx.tenantId);
 
       return res.json({
         success: true,
@@ -979,6 +1026,7 @@ export function createMessagingBroadcastRouter(
       };
 
       await logRef.set(logRecord);
+      invalidateMessagingCacheForTenant(ctx.tenantId);
 
       return res.json({
         success: true,
@@ -1004,6 +1052,15 @@ export function createMessagingBroadcastRouter(
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
 
+      const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+      const now = Date.now();
+      if (!forceRefresh) {
+        const cached = historyResponseCache.get(ctx.tenantId);
+        if (cached && cached.expiresAt > now) {
+          return res.json(cached.payload);
+        }
+      }
+
       const snap = await ctx.db
         .collection('broadcastLogs')
         .orderBy('createdAt', 'desc')
@@ -1011,9 +1068,17 @@ export function createMessagingBroadcastRouter(
         .get();
 
       const history = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      return res.json({ history });
+      const payload = { history };
+      historyResponseCache.set(ctx.tenantId, { payload, expiresAt: now + MESSAGING_CACHE_TTL_MS });
+      return res.json(payload);
     } catch (err: any) {
       console.error('[API Messaging] History error:', err);
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
       return res.status(500).json({ error: err.message || 'Failed to load broadcast history' });
     }
   });
@@ -1027,6 +1092,15 @@ export function createMessagingBroadcastRouter(
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
+
+      const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+      const now = Date.now();
+      if (!forceRefresh) {
+        const cached = repliesResponseCache.get(ctx.tenantId);
+        if (cached && cached.expiresAt > now) {
+          return res.json(cached.payload);
+        }
+      }
 
       const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
 
@@ -1158,9 +1232,20 @@ export function createMessagingBroadcastRouter(
         b.createdAt.localeCompare(a.createdAt)
       );
 
-      return res.json({ replies });
+      const payload = { replies };
+      repliesResponseCache.set(ctx.tenantId, {
+        payload,
+        expiresAt: Date.now() + MESSAGING_CACHE_TTL_MS,
+      });
+      return res.json(payload);
     } catch (err: any) {
       console.error('[API Messaging] Replies error:', err);
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
       return res.status(500).json({ error: err.message || 'Failed to load incoming replies' });
     }
   });
@@ -1175,6 +1260,15 @@ export function createMessagingBroadcastRouter(
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
+
+      const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+      const now = Date.now();
+      if (!forceRefresh) {
+        const cached = liveStatusResponseCache.get(ctx.tenantId);
+        if (cached && cached.expiresAt > now) {
+          return res.json(cached.payload);
+        }
+      }
 
       const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
       if (!saved.accountSid || !saved.authToken) {
@@ -1384,15 +1478,26 @@ export function createMessagingBroadcastRouter(
         }
       }
 
-      return res.json({
+      const payload = {
         configured: true,
         activeContentSid: saved.contentSid || '',
         templates,
         deliverySummary,
         autoWatcher,
+      };
+      liveStatusResponseCache.set(ctx.tenantId, {
+        payload,
+        expiresAt: Date.now() + MESSAGING_CACHE_TTL_MS,
       });
+      return res.json(payload);
     } catch (err: any) {
       console.error('[API Messaging] Live status error:', err);
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
       return res.status(500).json({ error: err.message || 'Failed to load live Twilio status' });
     }
   });
@@ -1426,6 +1531,8 @@ export function createMessagingBroadcastRouter(
             },
             { merge: true }
           );
+        const tenantId = await getTenantIdForRequest(req).catch(() => '');
+        if (tenantId) repliesResponseCache.delete(tenantId);
       }
     } catch (err) {
       console.error('[API Messaging] Webhook save warn:', err);

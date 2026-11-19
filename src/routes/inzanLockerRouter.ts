@@ -2,6 +2,7 @@ import express, { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAdminAppForProject, getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
+import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota.js';
 
 export const inzanLockerRouter = Router();
 
@@ -35,6 +36,11 @@ interface AuthenticatedCaller {
 
 let cachedConfig: { config: LockerServerConfig; fetchedAt: number } | null = null;
 let cachedJwt: { token: string; baseUrl: string; expiresAt: number } | null = null;
+let lastLockerConfigQuotaErrAt = 0;
+
+const inzanCallerCache = new Map<string, { caller: AuthenticatedCaller; expiresAt: number }>();
+const INZAN_CALLER_CACHE_TTL_MS = 15 * 60_000;
+const INZAN_CALLER_CACHE_MAX = 2000;
 
 const CONFIG_TTL_MS = 30 * 60 * 1000; // 30 minutes (reduces Firestore reads by 15x)
 const JWT_TTL_MS = 45 * 60 * 1000; // 45 minutes
@@ -106,39 +112,84 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
   const token = authHeader.split('Bearer ')[1];
   if (!token) return null;
 
+  let decoded: admin.auth.DecodedIdToken;
   try {
-    const decoded = await admin.auth(getInzanApp()).verifyIdToken(token);
-    const email = (decoded.email || '').toLowerCase();
+    decoded = await admin.auth(getInzanApp()).verifyIdToken(token);
+  } catch (err) {
+    console.error('[API] [InzanLockers] Token verification error:', err);
+    return null;
+  }
+
+  const now = Date.now();
+  const cached = inzanCallerCache.get(decoded.uid);
+  if (cached && cached.expiresAt > now) {
+    return cached.caller;
+  }
+
+  const email = (decoded.email || '').toLowerCase();
+  const isSuperAdminEmail =
+    email === 'michaelmitry13@gmail.com' ||
+    email === 'magd.gallab@gmail.com' ||
+    (email.endsWith('@inzan.com') && decoded.email_verified === true);
+
+  const claimRole = String((decoded as any).role || '').toLowerCase();
+  const staffRoles = new Set([
+    'admin',
+    'crm_admin',
+    'super_admin',
+    'manager',
+    'sales_manager',
+    'owner',
+    'rep',
+    'sales_rep',
+    'sales',
+    'staff',
+    'coach',
+    'frontdesk',
+    'receptionist',
+  ]);
+
+  const cacheCaller = (caller: AuthenticatedCaller): AuthenticatedCaller => {
+    if (inzanCallerCache.size >= INZAN_CALLER_CACHE_MAX) {
+      for (const [k, v] of inzanCallerCache) {
+        if (v.expiresAt <= now) inzanCallerCache.delete(k);
+      }
+      if (inzanCallerCache.size >= INZAN_CALLER_CACHE_MAX) {
+        const oldest = inzanCallerCache.keys().next().value;
+        if (oldest) inzanCallerCache.delete(oldest);
+      }
+    }
+    inzanCallerCache.delete(decoded.uid);
+    inzanCallerCache.set(decoded.uid, { caller, expiresAt: now + INZAN_CALLER_CACHE_TTL_MS });
+    return caller;
+  };
+
+  // Zero-Firestore-Read Fast Path for verified Inzan staff / superadmin claims
+  if (
+    isSuperAdminEmail ||
+    ((decoded as any).tenantId === 'inzanathletics' && staffRoles.has(claimRole))
+  ) {
+    return cacheCaller({
+      uid: decoded.uid,
+      email,
+      name: String((decoded as any).name || email || 'Staff'),
+      role: isSuperAdminEmail && !claimRole ? 'crm_admin' : claimRole || 'crm_admin',
+      isStaff: true,
+      clientDocId: null,
+      clientRecordId: null,
+    });
+  }
+
+  try {
     const inzanDb = getInzanFirestore();
     const userSnap = await inzanDb.collection('users').doc(decoded.uid).get();
     const userData = userSnap.exists ? userSnap.data() : null;
-
-    const isSuperAdminEmail =
-      email === 'michaelmitry13@gmail.com' ||
-      email === 'magd.gallab@gmail.com' ||
-      (email.endsWith('@inzan.com') && decoded.email_verified === true);
 
     const role = String(
       userData?.role ||
         (decoded as any).role ||
         (isSuperAdminEmail ? 'crm_admin' : 'client')
     ).toLowerCase();
-
-    const staffRoles = new Set([
-      'admin',
-      'crm_admin',
-      'super_admin',
-      'manager',
-      'sales_manager',
-      'owner',
-      'rep',
-      'sales_rep',
-      'sales',
-      'staff',
-      'coach',
-      'frontdesk',
-      'receptionist',
-    ]);
 
     const isStaff = isSuperAdminEmail || staffRoles.has(role);
 
@@ -158,7 +209,7 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
       }
     }
 
-    return {
+    return cacheCaller({
       uid: decoded.uid,
       email,
       name: String(userData?.name || (decoded as any).name || email || 'User'),
@@ -166,10 +217,16 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
       isStaff,
       clientDocId,
       clientRecordId,
-    };
+    });
   } catch (err) {
-    console.error('[API] [InzanLockers] Token verification error:', err);
-    return null;
+    if (isFirestoreQuotaOrUnavailableError(err)) {
+      const quotaErr: any = new Error('Database temporarily busy (quota exceeded). Please retry shortly.');
+      quotaErr.status = 503;
+      quotaErr.code = 'FIRESTORE_QUOTA_EXCEEDED';
+      throw quotaErr;
+    }
+    console.error('[API] [InzanLockers] Caller profile lookup error:', err);
+    throw err;
   }
 }
 
@@ -385,8 +442,17 @@ async function executeViaMacosBridge<T = any>(
 }
 
 async function getLockerServerConfig(forceRefresh = false): Promise<LockerServerConfig> {
-  if (!forceRefresh && cachedConfig && Date.now() - cachedConfig.fetchedAt < CONFIG_TTL_MS) {
+  const now = Date.now();
+  if (!forceRefresh && cachedConfig && now - cachedConfig.fetchedAt < CONFIG_TTL_MS) {
     return cachedConfig.config;
+  }
+  if (lastLockerConfigQuotaErrAt > 0 && now - lastLockerConfigQuotaErrAt < 5 * 60_000) {
+    if (cachedConfig) return cachedConfig.config;
+    return {
+      baseUrl: (process.env.INZAN_LOCKER_URL || DEFAULT_LOCKER_BASE_URL).replace(/\/+$/, ''),
+      username: process.env.INZAN_LOCKER_USERNAME || DEFAULT_LOCKER_USERNAME,
+      password: process.env.INZAN_LOCKER_PASSWORD || '',
+    };
   }
 
   let storedBaseUrl = '';
@@ -403,6 +469,9 @@ async function getLockerServerConfig(forceRefresh = false): Promise<LockerServer
       storedPassword = String(data?.password || '');
     }
   } catch (err) {
+    if (isFirestoreQuotaOrUnavailableError(err)) {
+      lastLockerConfigQuotaErrAt = Date.now();
+    }
     console.error('[API] [InzanLockers] Failed reading settings/inzan_locker_config:', err);
   }
 
@@ -2706,7 +2775,11 @@ inzanLockerRouter.get('/member-status', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('[API] [InzanLockers] GET /member-status error:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Failed to fetch member locker status' });
+    const status = isFirestoreQuotaOrUnavailableError(err) ? 503 : (err.status || 500);
+    res.status(status).json({
+      error: status === 503 ? 'Database temporarily busy (quota exceeded). Please retry shortly.' : (err.message || 'Failed to fetch member locker status'),
+      ...(status === 503 ? { code: 'FIRESTORE_QUOTA_EXCEEDED' } : {}),
+    });
   }
 });
 

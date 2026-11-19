@@ -34,7 +34,7 @@ import { openClickToCallModal } from './services/clickToCallService';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
 import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 
-export default function Leads() {
+function Leads() {
   const {
     currentUser,
     users,
@@ -53,6 +53,15 @@ export default function Leads() {
   } = useAppContext();
   const { t } = useLanguage();
   const isInzan = getTenantId() === 'inzanathletics' || features?.salesPipelineStages === '7-stage';
+  const userByIdMap = React.useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  const userByNameLowerMap = React.useMemo(() => {
+    const map = new Map<string, (typeof users)[number]>();
+    users.forEach(u => {
+      const k = (u.name || '').trim().toLowerCase();
+      if (k && !map.has(k)) map.set(k, u);
+    });
+    return map;
+  }, [users]);
 
   // Debounce timers for lead name/phone edits
   const debounceTimers = useRef<{ [key: string]: any }>({});
@@ -391,7 +400,8 @@ export default function Leads() {
             matchedUser.count += 1;
           } else {
             // Also check if this repName belongs to a non-sales user in users — if so, exclude from Sales dropdown
-            const nonSalesUser = users.find(u => (u.name || '').trim().toLowerCase() === repName.toLowerCase() && !isAssignableSalesUser(u));
+            const matchedNonSales = userByNameLowerMap.get(repName.toLowerCase());
+            const nonSalesUser = matchedNonSales && !isAssignableSalesUser(matchedNonSales) ? matchedNonSales : undefined;
             if (!nonSalesUser) {
               const key = `name:${repName}`;
               if (!map.has(key)) {
@@ -425,7 +435,7 @@ export default function Leads() {
         resolveUserDisplay(lead.assignedTo, users, '').toLowerCase() === targetName
       );
     }
-    const targetUser = users.find(u => u.id === filterVal);
+    const targetUser = userByIdMap.get(filterVal);
     const targetNameLower = (targetUser?.name || '').toLowerCase();
     return (
       lead.assignedTo === filterVal ||
@@ -573,14 +583,14 @@ export default function Leads() {
     }
     if (targetVal.startsWith('name:')) {
       const repName = targetVal.slice(5);
-      const matchedUser = users.find(u => (u.name || '').toLowerCase() === repName.toLowerCase());
+      const matchedUser = userByNameLowerMap.get(repName.toLowerCase());
       return {
         assignedTo: matchedUser ? matchedUser.id : repName,
         salesName: repName,
         salesRep: repName,
       };
     }
-    const matchedUser = users.find(u => u.id === targetVal);
+    const matchedUser = userByIdMap.get(targetVal);
     const repName = matchedUser?.name || matchedUser?.email || targetVal;
     return {
       assignedTo: targetVal,
@@ -1441,35 +1451,40 @@ export default function Leads() {
                   </div>
                   {canAssignLeads ? (
                     <div onClick={(e) => e.stopPropagation()}>
-                      <Select
-                        value={lead.assignedTo || (lead.salesName ? `name:${lead.salesName}` : 'unassigned')}
-                        onValueChange={(v) => {
-                          const resolved = resolveRepTarget(v || 'unassigned');
-                          const nowIso = new Date().toISOString();
-                          updateClient(lead.id, {
-                            assignedTo: resolved.assignedTo,
-                            salesName: resolved.salesName || undefined,
-                            salesRep: resolved.salesRep || undefined,
-                            assignedAt: resolved.assignedTo ? nowIso : undefined,
-                            transferredAt: resolved.assignedTo ? nowIso : undefined,
-                            assignedBy: currentUser?.name || currentUser?.id || 'System',
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="w-[155px] h-7 text-[11px]">
-                          <SelectValue placeholder="Assign rep">
-                            {repLabel || t('leads.tabs.unassigned')}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                          {repSummaries.map(rep => (
-                            <SelectItem key={rep.value} value={rep.value}>
-                              {rep.label} {rep.isLegacyName ? '(RedGITS)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {(() => {
+                        const assignVal = lead.assignedTo || (lead.salesName ? `name:${lead.salesName}` : 'unassigned');
+                        const hasOption = assignVal === 'unassigned' || repSummaries.some(r => r.value === assignVal);
+                        return (
+                          <select
+                            value={assignVal}
+                            aria-label="Assign rep"
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const resolved = resolveRepTarget(v || 'unassigned');
+                              const nowIso = new Date().toISOString();
+                              updateClient(lead.id, {
+                                assignedTo: resolved.assignedTo,
+                                salesName: resolved.salesName || undefined,
+                                salesRep: resolved.salesRep || undefined,
+                                assignedAt: resolved.assignedTo ? nowIso : undefined,
+                                transferredAt: resolved.assignedTo ? nowIso : undefined,
+                                assignedBy: currentUser?.name || currentUser?.id || 'System',
+                              });
+                            }}
+                            className="w-[155px] h-7 rounded-md border border-input bg-background px-2 text-[11px] text-foreground shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                          >
+                            <option value="unassigned">{t('leads.tabs.unassigned')}</option>
+                            {!hasOption && (
+                              <option value={assignVal}>{repLabel || assignVal}</option>
+                            )}
+                            {repSummaries.map(rep => (
+                              <option key={rep.value} value={rep.value}>
+                                {rep.label} {rep.isLegacyName ? '(RedGITS)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                     </div>
                   ) : repLabel ? (
                     <Badge variant="outline" className="w-fit text-[10px] px-1.5 py-0 h-5">
@@ -2617,7 +2632,7 @@ export default function Leads() {
                     ? undefined
                     : filterAssignedTo === 'unassigned'
                       ? t('leads.tabs.unassigned')
-                      : repSummaries.find(r => r.value === filterAssignedTo)?.label || users.find(u => u.id === filterAssignedTo)?.name || 'Unknown User'}
+                      : repSummaries.find(r => r.value === filterAssignedTo)?.label || userByIdMap.get(filterAssignedTo)?.name || 'Unknown User'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="max-h-72">
@@ -3399,4 +3414,6 @@ export default function Leads() {
     </div>
   );
 }
+
+export default React.memo(Leads);
 

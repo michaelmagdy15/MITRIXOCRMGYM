@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { User, UserId, UserRole, isSuperAdmin, isAdmin, BrandingSettings, PendingAccount, PasswordResetRequest, Client, Coach } from '../types';
 import { auth, db, signInWithEmail, signInWithCustomAuthToken, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail, getTenantId } from '../firebase';
 import { onAuthStateChanged, updatePassword as fbUpdatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
@@ -104,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const mobileRestoreAttemptedRef = useRef(false);
 
   const issueMobileDeviceToken = async (fbUser: { getIdToken: () => Promise<string>; email: string | null }) => {
+    if (!isMobileDevice()) return;
     try {
       const existing = getSavedMobileAuthSession();
       if (existing?.token && existing.email === (fbUser.email || existing.email)) {
@@ -165,11 +166,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (userDoc.exists()) {
             userData = userDoc.data() as User;
-            // Keep auth custom claims (role, tenantId) in sync for Storage rules; refresh token if updated.
-            firebaseUser.getIdToken().then(t => fetch('/api/auth/sync-claims', { method: 'POST', headers: { Authorization: `Bearer ${t}` } }))
-              .then(r => r.ok ? r.json() : null)
-              .then(d => (d?.refreshed ? firebaseUser.getIdToken(true) : undefined))
-              .catch(err => console.warn('[Auth] Claim sync failed:', err));
             userData.id = userId;
             if (userData.status === 'nonworking') {
               setCurrentUser(null);
@@ -341,6 +337,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error("Error migrating user clientDocId/portalUserId:", e);
               }
             }
+            // Keep auth custom claims (role, tenantId) in sync only when missing or mismatched
+            const expectedTenantId = getTenantId();
+            firebaseUser
+              .getIdTokenResult()
+              .then((tokenResult) => {
+                if (
+                  tokenResult.claims?.role === userData!.role &&
+                  tokenResult.claims?.tenantId === expectedTenantId
+                ) {
+                  return null;
+                }
+                return fetch('/api/auth/sync-claims', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${tokenResult.token}` },
+                });
+              })
+              .then((r) => (r && r.ok ? r.json() : null))
+              .then((d) => (d?.refreshed ? firebaseUser.getIdToken(true) : undefined))
+              .catch((err) => console.warn('[Auth] Claim sync failed:', err));
+
             setCurrentUser(userData);
             setAuthError(null);
           } else {
@@ -538,8 +554,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAuthError(null);
           }
 
-          // Ensure a persistent device session token is stored so mobile devices never lose their login
-          issueMobileDeviceToken(firebaseUser);
+          // Ensure a persistent device session token is stored only on mobile/PWA/native devices
+          if (isMobileDevice()) {
+            issueMobileDeviceToken(firebaseUser);
+          }
         } catch (error: any) {
           console.error("Error fetching user doc:", error);
           setAuthError(`[Firestore Auth Error] ${error.code || 'UNKNOWN'}: ${error.message || String(error)}`);
@@ -548,7 +566,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         // If Firebase Auth storage was cleared on a mobile WebView/PWA, automatically restore from saved device session
-        if (!mobileRestoreAttemptedRef.current) {
+        if (!mobileRestoreAttemptedRef.current && isMobileDevice()) {
           mobileRestoreAttemptedRef.current = true;
           const savedSession = getSavedMobileAuthSession();
           if (savedSession) {
@@ -569,6 +587,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     await signInWithCustomAuthToken(data.customToken);
                     return; // onAuthStateChanged will immediately fire with the restored user
                   }
+                } else if (res.status === 401 || res.status === 403) {
+                  clearMobileAuthSession();
                 }
               }
 
@@ -908,7 +928,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { uid, coachId };
   };
 
-  const createClientAccount = async (clientId: string, memberId: string, clientName: string, phone?: string) => {
+  const createClientAccount = useCallback(async (clientId: string, memberId: string, clientName: string, phone?: string) => {
     const cleanMemberId = String(memberId || clientId).replace(/^#/, '').trim();
     const email = getMemberEmail(cleanMemberId);
     const uid = await createFirebaseUser(email, '12345678');
@@ -926,7 +946,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Update the client record to flag portal access
     await updateDoc(doc(db, 'clients', clientId), { portalUserId: uid });
     return { uid };
-  };
+  }, []);
 
   const resetClientPortalPassword = async (
     clientId: string,

@@ -25,6 +25,12 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
   const [loadingHistoricalPayments, setLoadingHistoricalPayments] = useState(false);
   const historicalLoadPromiseRef = useRef<Promise<void> | null>(null);
   const { effectiveRole } = useAuth();
+  const currentUserRef = useRef(currentUser);
+  const clientsRef = useRef(clients);
+  const canDeletePaymentsRef = useRef(canDeletePayments);
+  currentUserRef.current = currentUser;
+  clientsRef.current = clients;
+  canDeletePaymentsRef.current = canDeletePayments;
 
   const recentWindowStartIso = useMemo(() => {
     const days = isTenantInzan() ? 30 : 90;
@@ -114,10 +120,14 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
 
 
 
-  const addPayment = async (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => {
-    if (!currentUser) return;
+  const paymentsRef = useRef(payments);
+  paymentsRef.current = payments;
+
+  const addPayment = useCallback(async (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => {
+    const user = currentUserRef.current;
+    if (!user) return;
     try {
-      const client = clients.find(c => c.id === payment.clientId);
+      const client = clientsRef.current.find(c => c.id === payment.clientId);
       const clientName = client?.name || payment.clientId;
 
       const paymentData = {
@@ -134,43 +144,44 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       const docId = docRef.id;
 
       await setDoc(docRef, cleanData(paymentData), { merge: true });
-      await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
+      await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} LE for ${clientName}`, user?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'payments');
     }
-  };
+  }, []);
 
-  const deletePayment = async (id: string) => {
-    if (!canDeletePayments) {
+  const deletePayment = useCallback(async (id: string) => {
+    if (!canDeletePaymentsRef.current) {
       throw new Error('Unauthorized: You do not have permission to delete payments.');
     }
     try {
-      const payment = payments.find(p => p.id === id);
+      const payment = paymentsRef.current.find(p => p.id === id);
       const clientName = payment
-        ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
+        ? (clientsRef.current.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
       const amount = payment?.amount || 'unknown';
 
       await updateDoc(doc(db, 'payments', id), { deleted_at: new Date().toISOString() });
-      await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment of ${amount} LE for ${clientName}`, currentUser?.name);
+      await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment of ${amount} LE for ${clientName}`, currentUserRef.current?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `payments/${id}`);
     }
-  };
+  }, []);
 
-  const updatePayment = async (id: string, updates: Partial<Payment>) => {
-    if (!currentUser) return;
+  const updatePayment = useCallback(async (id: string, updates: Partial<Payment>) => {
+    const user = currentUserRef.current;
+    if (!user) return;
     try {
-      const payment = payments.find(p => p.id === id);
+      const payment = paymentsRef.current.find(p => p.id === id);
       const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
       if (payment && isInzan) {
-        const editCheck = isPaymentEditableByStaff(payment, currentUser, canDeletePayments);
+        const editCheck = isPaymentEditableByStaff(payment, user, canDeletePaymentsRef.current);
         if (!editCheck.canEdit) {
           throw new Error(editCheck.reason || 'Unauthorized to modify this payment.');
         }
       }
       const clientName = payment
-        ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
+        ? (clientsRef.current.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
 
       const syncedUpdates: Partial<Payment> =
@@ -179,11 +190,11 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
           : updates;
 
       await updateDoc(doc(db, 'payments', id), cleanData(syncedUpdates));
-      await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
+      await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, user?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `payments/${id}`);
     }
-  };
+  }, []);
 
   return {
     payments,

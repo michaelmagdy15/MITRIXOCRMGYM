@@ -132,9 +132,11 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
   return 'Adults';
 };
 
-export default function Clients() {
+function Clients() {
   const { t } = useLanguage();
   const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, resetClientPortalPassword, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages, searchQuery, setSearchQuery } = useAppContext();
+
+  const userByIdMap = React.useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
 
   const availableCoaches = React.useMemo(() => {
     const map = new Map<string, { id: string; userId?: string; coachDocId?: string; coachId?: string; name: string; branch?: string }>();
@@ -682,6 +684,18 @@ export default function Clients() {
   const deferredFilterCategory = useDeferredValue(filterCategory);
   const deferredFilterCoach = useDeferredValue(filterCoach);
   const deferredFilterCorporate = useDeferredValue(filterCorporate);
+  const idSearchUserEditedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!idSearchUserEditedRef.current) return;
+    const timer = window.setTimeout(() => {
+      idSearchUserEditedRef.current = false;
+      if (!searchTerm.trim()) {
+        setSearchQuery(idSearchTerm);
+      }
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [idSearchTerm, searchTerm, setSearchQuery]);
 
   React.useEffect(() => {
     setFullPageView(false);
@@ -2266,7 +2280,7 @@ export default function Clients() {
           return true;
         });
       } else {
-        const repUser = users.find(u => u.id === deferredFilterRep);
+        const repUser = userByIdMap.get(deferredFilterRep);
         const repCanonical = repUser?.name ? toCanonical(repUser.name).toLowerCase() : '';
         filtered = repUser
           ? filtered.filter(m => {
@@ -2319,7 +2333,7 @@ export default function Clients() {
       const matchedCoach = availableCoaches.find(
         c => c.id === deferredFilterCoach || c.name.toLowerCase() === deferredFilterCoach.toLowerCase()
       );
-      const coachUser = users.find(u => u.id === deferredFilterCoach);
+      const coachUser = userByIdMap.get(deferredFilterCoach);
       const coachNameLower = (matchedCoach?.name || coachUser?.name || deferredFilterCoach).toLowerCase();
       const coachIdCandidate = matchedCoach?.id || coachUser?.id || deferredFilterCoach;
       filtered = coachNameLower
@@ -2372,7 +2386,7 @@ export default function Clients() {
     searchMode,
     deferredFilterBranch,
     deferredFilterRep,
-    users,
+    userByIdMap,
     deferredFilterDiscount,
     deferredFilterGender,
     deferredFilterCategory,
@@ -2682,7 +2696,7 @@ export default function Clients() {
         ) : clientList.map(client => {
           const assignedName = (() => {
             if (!client.assignedTo) return client.salesName || null;
-            const u = users.find(u => u.id === client.assignedTo);
+            const u = userByIdMap.get(client.assignedTo);
             return u ? (u.name || u.email) : client.salesName || client.assignedTo;
           })();
           const latestNote = resolveLatestMemberNote(client);
@@ -3520,11 +3534,8 @@ export default function Clients() {
                   value={idSearchTerm}
                   onChange={(e) => {
                     const val = e.target.value;
+                    idSearchUserEditedRef.current = true;
                     setIdSearchTerm(val);
-                    // Sync with context searchQuery when general search is empty so useClients fetches Firestore IDs on-demand
-                    if (!searchTerm.trim()) {
-                      setSearchQuery(val);
-                    }
                   }}
                   onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 />
@@ -3532,6 +3543,7 @@ export default function Clients() {
                   <button
                     type="button"
                     onClick={() => {
+                      idSearchUserEditedRef.current = false;
                       setIdSearchTerm('');
                       if (!searchTerm.trim()) setSearchQuery('');
                     }}
@@ -8010,3 +8022,5 @@ export default function Clients() {
     </div>
   );
 }
+
+export default React.memo(Clients);

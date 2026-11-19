@@ -486,11 +486,18 @@
             } catch(_) {}
 
             if (cached) {
+              var sanitizeCachedUrl = function(u) {
+                if (typeof u !== 'string' || !u) return u;
+                if (tenantKey === 'strike') {
+                  return u.replace(/faa-test-guide-v2\.firebasestorage\.app/gi, 'strike-production-f5242.firebasestorage.app');
+                }
+                return u;
+              };
               if (cached.splashScreenUrl && bgEl) {
-                bgEl.style.backgroundImage = "url('" + cached.splashScreenUrl + "')";
+                bgEl.style.backgroundImage = "url('" + sanitizeCachedUrl(cached.splashScreenUrl) + "')";
               }
               if (cached.splashScreenLogoUrl && logo) {
-                logo.src = cached.splashScreenLogoUrl;
+                logo.src = sanitizeCachedUrl(cached.splashScreenLogoUrl);
               }
               if (cached.splashScreenTagline && title) {
                 title.textContent = cached.splashScreenTagline;

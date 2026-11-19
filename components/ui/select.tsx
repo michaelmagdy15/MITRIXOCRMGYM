@@ -69,9 +69,11 @@ function Select({ children, items, ...props }: SelectPrimitive.Root.Props<any>) 
 
   const staticLabelsMap = React.useMemo(() => {
     const map = new Map<string, string>();
-    collectSelectItems(children, map);
+    if (!items) {
+      collectSelectItems(children, map);
+    }
     return map;
-  }, [children]);
+  }, [children, items]);
 
   const registerLabel = React.useCallback((val: string, label: string) => {
     if (!label) return;
@@ -90,6 +92,8 @@ function Select({ children, items, ...props }: SelectPrimitive.Root.Props<any>) 
     [staticLabelsMap]
   );
 
+  const prevResolvedItemsRef = React.useRef<Record<string, string>>({});
+
   const resolvedItems = React.useMemo(() => {
     if (items) return items;
     const obj: Record<string, string> = {};
@@ -99,6 +103,13 @@ function Select({ children, items, ...props }: SelectPrimitive.Root.Props<any>) 
     staticLabelsMap.forEach((v, k) => {
       obj[k] = v;
     });
+    const prev = prevResolvedItemsRef.current;
+    const prevKeys = Object.keys(prev);
+    const nextKeys = Object.keys(obj);
+    if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === obj[k])) {
+      return prev;
+    }
+    prevResolvedItemsRef.current = obj;
     return obj;
   }, [items, staticLabelsMap]);
 

@@ -47,7 +47,7 @@ import {
 } from './utils/egyptianPayments';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 
-export default function Payments() {
+function Payments() {
   const { t, language, isRtl } = useLanguage();
   const {
     clients,
@@ -76,6 +76,7 @@ export default function Payments() {
     loadingHistoricalPayments,
     can,
   } = useAppContext();
+  const userByIdMap = React.useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => {
       const active = p.isActive !== false && p.is_active !== false && !p.archivedAt;
@@ -718,7 +719,7 @@ export default function Payments() {
         sales_rep_id: effectiveSalesRepId || '',
         salesName: effectiveSalesName || '',
         recordedBy: recordedById || currentUser?.id || '',
-        recordedByName: users.find(u => u.id === (recordedById || currentUser?.id))?.name || '',
+        recordedByName: userByIdMap.get(recordedById || currentUser?.id || '')?.name || '',
         paymentDate: safeIsoDate(paymentDate, true),
         startDate: safeIsoDate(startDate, true),
         endDate: endDate ? safeIsoDate(endDate) : undefined,
@@ -1164,7 +1165,7 @@ export default function Payments() {
     const splitPrimaryAmt = (payment as any).primaryTenderAmount;
     const splitSecondaryAmt = (payment as any).secondaryTenderAmount;
     const installmentsList: any[] = Array.isArray((payment as any).installments) ? (payment as any).installments : [];
-    const cashierName = users.find(u => u.id === payment.recordedBy)?.name || (payment as any).recordedByName || currentUser?.name || 'Reception';
+    const cashierName = userByIdMap.get(payment.recordedBy || '')?.name || (payment as any).recordedByName || currentUser?.name || 'Reception';
     const branchLabel = resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : 'MAIN';
     const serialNo = payment.receiptSerial || payment.id.substring(0, 8).toUpperCase();
 
@@ -1384,6 +1385,7 @@ export default function Payments() {
   const deferredFilterDateTo = React.useDeferredValue(filterDateTo);
   const deferredSortConfig = React.useDeferredValue(sortConfig);
   const deferredFilterShowOnlyHeld = React.useDeferredValue(filterShowOnlyHeld);
+  const deferredFilterSalesName = React.useDeferredValue(filterSalesName);
 
   const { clientById, clientByMemberId, clientByPortalUserId, clientByPhone } = React.useMemo(() => {
     const byId = new Map<string, Client>();
@@ -1502,10 +1504,10 @@ export default function Payments() {
       }
 
       // Sales name filter — canonicalize both sides so variants like "Maison Mohmed" match "Maison Mohamed"
-      if (filterSalesName !== 'All') {
+      if (deferredFilterSalesName !== 'All') {
         const resolvedSalesName = resolveUserDisplay(payment.salesName, users, payment.salesName || '');
         const canonicalResolved = toCanonical(resolvedSalesName).toLowerCase();
-        const canonicalFilter = toCanonical(filterSalesName).toLowerCase();
+        const canonicalFilter = toCanonical(deferredFilterSalesName).toLowerCase();
         if (canonicalResolved !== canonicalFilter) return false;
       }
 
@@ -1548,7 +1550,7 @@ export default function Payments() {
     });
 
     return result;
-  }, [payments, clients, deferredSearchTerm, deferredFilterMethod, deferredFilterBranch, deferredFilterPackage, deferredFilterCoach, deferredFilterDateFrom, deferredFilterDateTo, deferredSortConfig, isRep, currentUser, filterSalesName, deferredFilterShowOnlyHeld, isInzan, revenueScope, resolvePaymentClient]);
+  }, [payments, clients, deferredSearchTerm, deferredFilterMethod, deferredFilterBranch, deferredFilterPackage, deferredFilterCoach, deferredFilterDateFrom, deferredFilterDateTo, deferredSortConfig, isRep, currentUser, deferredFilterSalesName, deferredFilterShowOnlyHeld, isInzan, revenueScope, resolvePaymentClient]);
 
   // Unique package names from all payments (for filter dropdown)
   const uniquePackageNames = React.useMemo(() => {
@@ -3085,8 +3087,8 @@ export default function Payments() {
                       payment.guestName ||
                       (payment as any).guest_name ||
                       (t('payments.table.unknown_client') || 'Walk-in Guest');
-                    const recordedByUser = users.find(u => u.id === payment.recordedBy);
-                    const salesRepUser = !recordedByUser ? users.find(u => u.id === payment.sales_rep_id) : null;
+                    const recordedByUser = payment.recordedBy ? userByIdMap.get(payment.recordedBy) : undefined;
+                    const salesRepUser = !recordedByUser && payment.sales_rep_id ? userByIdMap.get(payment.sales_rep_id) : undefined;
                     const recordedByLabel = recordedByUser?.name
                       || (payment as any).recordedByName
                       || (payment.recordedBy ? resolveUserDisplay(payment.recordedBy, users, payment.recordedBy) : '')
@@ -4022,3 +4024,5 @@ export default function Payments() {
     </div>
   );
 }
+
+export default React.memo(Payments);

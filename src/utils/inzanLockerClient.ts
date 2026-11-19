@@ -251,7 +251,12 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
     data = { error: text || `HTTP ${res.status}` };
   }
   if (!res.ok) {
-    throw new Error(data?.error || data?.reason || data?.message || `Locker request failed (${res.status})`);
+    const err = new Error(data?.error || data?.reason || data?.message || `Locker request failed (${res.status})`) as Error & { status?: number; code?: string };
+    err.status = res.status;
+    if (typeof data?.code === 'string') {
+      err.code = data.code;
+    }
+    throw err;
   }
   return data as T;
 }

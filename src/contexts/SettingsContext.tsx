@@ -4,6 +4,7 @@ import { BookingWindowConfig, DEFAULT_BOOKING_WINDOW_CONFIG } from '../utils/boo
 import { PayoutConfig } from '../types/payout';
 import { auth, db, getTenantId } from '../firebase';
 import { addAuditLog } from '../services/auditService';
+import { sanitizeLegacyStrikeStorageUrl } from '../utils/firestoreQuota';
 import { collection, doc, setDoc, onSnapshot, query, where, documentId } from 'firebase/firestore';
 
 export const TENANT_BRANDING_DEFAULTS: Record<'inzanathletics' | 'strike', BrandingSettings> = {
@@ -204,11 +205,18 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   // Helper to preload image before setting loaded state
   // Apply branding immediately without artificial delay
   const applyBrandingData = useCallback((data: BrandingSettings) => {
+    const isStrike = getTenantId() === 'strike';
     const tenantDefault = getInitialBranding();
     const rawName = (data.companyName || '').trim();
     const effectiveName = (!rawName || rawName.toLowerCase().includes('mitrixo')) ? tenantDefault.companyName : rawName;
-    const rawLogo = (data.logoUrl || '').trim();
+    const rawLogo = sanitizeLegacyStrikeStorageUrl(data.logoUrl, isStrike);
     const effectiveLogo = (!rawLogo || rawLogo.includes('mitrixogymcrmlogo.png') || rawLogo.includes('mitrixo')) ? tenantDefault.logoUrl : rawLogo;
+    const sanitizedSplashUrl = data.splashScreenUrl !== undefined
+      ? sanitizeLegacyStrikeStorageUrl(data.splashScreenUrl, isStrike)
+      : tenantDefault.splashScreenUrl;
+    const sanitizedSplashLogoUrl = data.splashScreenLogoUrl
+      ? sanitizeLegacyStrikeStorageUrl(data.splashScreenLogoUrl, isStrike)
+      : '';
     const mergedData: BrandingSettings = {
       currencyCode: 'EGP',
       currencySymbol: 'LE',
@@ -216,8 +224,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       ...data,
       companyName: effectiveName,
       logoUrl: effectiveLogo,
-      splashScreenUrl: data.splashScreenUrl !== undefined ? data.splashScreenUrl : tenantDefault.splashScreenUrl,
-      splashScreenLogoUrl: data.splashScreenLogoUrl || tenantDefault.splashScreenLogoUrl,
+      splashScreenUrl: sanitizedSplashUrl || tenantDefault.splashScreenUrl,
+      splashScreenLogoUrl: sanitizedSplashLogoUrl || tenantDefault.splashScreenLogoUrl,
       splashScreenTagline: data.splashScreenTagline || tenantDefault.splashScreenTagline,
     };
 

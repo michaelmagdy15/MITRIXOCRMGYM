@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   collection,
   doc,
@@ -206,6 +206,19 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   }, [normalizedMembers, normalizedExpired, normalizedLeads, normalizedSearch]);
 
   const baseClients = clients;
+  const currentUserRef = useRef(currentUser);
+  const baseClientsRef = useRef(baseClients);
+  const membersListRef = useRef(membersList);
+  const expiredMembersListRef = useRef(expiredMembersList);
+  const leadsListRef = useRef(leadsList);
+  const searchResultsRef = useRef(searchResults);
+  const hasHydratedLocalMembersRef = useRef(false);
+  currentUserRef.current = currentUser;
+  baseClientsRef.current = baseClients;
+  membersListRef.current = membersList;
+  expiredMembersListRef.current = expiredMembersList;
+  leadsListRef.current = leadsList;
+  searchResultsRef.current = searchResults;
 
 
 
@@ -242,6 +255,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
 
 
+    hasHydratedLocalMembersRef.current = false;
+    let hydrationTimer: ReturnType<typeof setTimeout> | null = null;
     const q = query(
       collection(db, 'clients'), 
       where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active', 'HOLD', 'ACTIVE', 'Frozen', 'frozen'])
@@ -255,12 +270,30 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         setMembersList(fetched);
         setLoading(false);
 
-        // Sync fetched snapshot members into gymLocalDb in background so local DB stays fresh
+        // Sync fetched snapshot members into gymLocalDb in background without blocking initial paint or re-writing unchanged rows
         const tenantId = getTenantId();
-        if (tenantId && fetched.length > 0) {
-          saveMembers(tenantId, fetched).catch((err) => {
-            console.warn('[useClients] Background saveMembers failed:', err);
-          });
+        if (tenantId) {
+          if (!hasHydratedLocalMembersRef.current) {
+            hasHydratedLocalMembersRef.current = true;
+            if (fetched.length > 0) {
+              if (hydrationTimer) clearTimeout(hydrationTimer);
+              hydrationTimer = setTimeout(() => {
+                saveMembers(tenantId, fetched).catch((err) => {
+                  console.warn('[useClients] Background saveMembers failed:', err);
+                });
+              }, 300);
+            }
+          } else {
+            const changedDocs = snapshot
+              .docChanges()
+              .filter((ch) => ch.type === 'added' || ch.type === 'modified')
+              .map((ch) => ({ ...ch.doc.data(), id: ch.doc.id } as Omit<Client, 'comments' | 'interactions'>));
+            if (changedDocs.length > 0) {
+              saveMembers(tenantId, changedDocs).catch((err) => {
+                console.warn('[useClients] Incremental saveMembers failed:', err);
+              });
+            }
+          }
         }
       },
       (error) => {
@@ -269,7 +302,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
     );
 
-    return () => unsubClients();
+    return () => {
+      unsubClients();
+      if (hydrationTimer) clearTimeout(hydrationTimer);
+    };
   }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const [loadingExpired, setLoadingExpired] = useState(false);
@@ -562,7 +598,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     };
   }, [currentUser?.id, currentUser?.role, effectiveRole, searchTerm]);
 
-  const fetchClientDetails = async (clientId: string) => {
+  const fetchClientDetails = useCallback(async (clientId: string) => {
     try {
       const commentsSnap = await getDocs(collection(db, 'clients', clientId, 'comments'));
       const interactionsSnap = await getDocs(collection(db, 'clients', clientId, 'interactions'));
@@ -570,7 +606,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       const comments = commentsSnap.docs.map(d => ({ ...d.data(), id: d.id } as CRMComment));
       const interactions = interactionsSnap.docs.map(d => ({ ...d.data(), id: d.id } as InteractionLog));
 
-      const existing = baseClients.find(c => c.id === clientId);
+      const existing = baseClientsRef.current.find(c => c.id === clientId);
       if (existing?.lastCall?.text && interactions.length === 0) {
         interactions.push({
           id: `redgits-lastcall-${clientId}`,
@@ -595,9 +631,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       handleFirestoreError(error, OperationType.GET, `clients/${clientId}/details`);
       return { comments: [], interactions: [] };
     }
-  };
+  }, []);
 
-  const generateMemberId = async (): Promise<string> => {
+  const generateMemberId = useCallback(async (): Promise<string> => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return `TEMP-${Date.now().toString(36).toUpperCase()}`;
     }
@@ -620,9 +656,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
       return Math.floor(Math.random() * 10000).toString();
     }
-  };
+  }, []);
 
-  const generateLeadId = async (): Promise<string> => {
+  const generateLeadId = useCallback(async (): Promise<string> => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return `TEMP-LEAD-${Date.now().toString(36).toUpperCase()}`;
     }
@@ -645,14 +681,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
       return Math.floor(10000 + Math.random() * 90000).toString();
     }
-  };
+  }, []);
 
   /**
    * Private helper — creates a Firebase Auth user + Firestore /users document
    * for a gym member's portal account.
    * Returns the new uid on success, or undefined if creation failed.
    */
-  const createPortalAccount = async (
+  const createPortalAccount = useCallback(async (
     memberId: string,
     name: string,
     phone?: string
@@ -675,9 +711,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       console.error('Auto portal account creation failed:', authErr);
       return undefined;
     }
-  };
+  }, []);
 
-  const handleOfflineClientCreate = async (
+  const handleOfflineClientCreate = useCallback(async (
     clientData: any,
     tenantId: string
   ): Promise<string> => {
@@ -726,13 +762,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       finalData.status === 'Lead' ? 'LEAD' : 'CLIENT',
       tempClientId,
       `[Offline] Added new ${finalData.status === 'Lead' ? 'lead' : 'client'}: ${finalData.name}`,
-      currentUser?.name
+      currentUserRef.current?.name
     ).catch(() => {});
 
     return tempClientId;
-  };
+  }, []);
 
-  const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<string> => {
+  const addClient = useCallback(async (client: Omit<Client, 'id' | 'createdAt'>): Promise<string> => {
     const tenantId = getTenantId();
     try {
       const { comments, ...clientData } = client;
@@ -767,7 +803,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       // Find siblings sharing the same normalized phone
       const siblings = normPhone
-        ? baseClients.filter(c => {
+        ? baseClientsRef.current.filter(c => {
             if (!c.phone) return false;
             return (c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone;
           })
@@ -777,7 +813,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       if (siblings.length > 0) {
         clientData.linkedAccount = true;
       } else {
-        const isExactDuplicate = !clientData.linkedAccount && baseClients.some(c => 
+        const isExactDuplicate = !clientData.linkedAccount && baseClientsRef.current.some(c => 
           c.name?.trim().toLowerCase() === clientData.name?.trim().toLowerCase() && 
           normPhone && 
           ((c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone)
@@ -823,7 +859,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         if (clientData.assignedTo && clientData.assignedTo !== 'unassigned') {
           clientData.assignedAt = clientData.assignedAt || nowIso;
           clientData.transferredAt = clientData.transferredAt || nowIso;
-          clientData.assignedBy = clientData.assignedBy || currentUser?.name || currentUser?.id || 'System';
+          clientData.assignedBy = clientData.assignedBy || currentUserRef.current?.name || currentUserRef.current?.id || 'System';
         }
 
         const finalData = {
@@ -866,7 +902,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           client.status === 'Lead' ? 'LEAD' : 'CLIENT',
           docRef.id,
           `Added new ${client.status === 'Lead' ? 'lead' : 'client'}: ${client.name}`,
-          currentUser?.name
+          currentUserRef.current?.name
         );
         return docRef.id;
       } catch (firestoreError) {
@@ -884,9 +920,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       handleFirestoreError(error, OperationType.CREATE, 'clients', true);
       throw error;
     }
-  };
+  }, [generateMemberId, generateLeadId, handleOfflineClientCreate, createPortalAccount]);
 
-  const bulkAddClients = async (
+  const bulkAddClients = useCallback(async (
     newClients: Client[]
   ): Promise<{ success: number; failed: number; errors: { row: number; reason: string }[] }> => {
     let successCount = 0;
@@ -894,7 +930,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     const errors: { row: number; reason: string }[] = [];
 
     // Pre-filter duplicates to avoid ID generation for them
-    const existingPhones = new Set(baseClients.map(c => c.phone));
+    const existingPhones = new Set(baseClientsRef.current.map(c => c.phone));
     const uniquePhonesInBatch = new Set<string>();
     
     const validNewClients = newClients.filter((c, index) => {
@@ -1005,24 +1041,24 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         await batch.commit();
       }
 
-    await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`, currentUser?.name);
+    await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`, currentUserRef.current?.name);
     return { success: successCount, failed: failedCount, errors };
-  };
+  }, []);
 
-  const updateClient = async (id: string, updates: Partial<Client>) => {
+  const updateClient = useCallback(async (id: string, updates: Partial<Client>) => {
     try {
       const updateData = { ...updates };
-      const existing = baseClients.find(c => c.id === id);
+      const existing = baseClientsRef.current.find(c => c.id === id);
 
       // Keep references to previous state for rollback
-      const prevMembers = [...membersList];
-      const prevExpired = [...expiredMembersList];
-      const prevLeads = [...leadsList];
-      const prevSearch = [...searchResults];
+      const prevMembers = [...membersListRef.current];
+      const prevExpired = [...expiredMembersListRef.current];
+      const prevLeads = [...leadsListRef.current];
+      const prevSearch = [...searchResultsRef.current];
 
       const applyOptimisticUpdate = () => {
         let updated: Omit<Client, 'comments' | 'interactions'>;
-        const merged = baseClients.find(c => c.id === id);
+        const merged = baseClientsRef.current.find(c => c.id === id);
         if (merged) {
           updated = { ...merged, ...updateData };
         } else {
@@ -1140,7 +1176,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
       
       const siblings = normPhone
-        ? baseClients.filter(c => c.id !== id && c.phone && ((c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone))
+        ? baseClientsRef.current.filter(c => c.id !== id && c.phone && ((c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone))
         : [];
 
       if (siblings.length > 0) {
@@ -1167,7 +1203,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           const transferTs = updateData.transferredAt || updateData.assignedAt || new Date().toISOString();
           updateData.assignedAt = transferTs;
           updateData.transferredAt = transferTs;
-          updateData.assignedBy = updateData.assignedBy || currentUser?.name || currentUser?.id || 'System';
+          updateData.assignedBy = updateData.assignedBy || currentUserRef.current?.name || currentUserRef.current?.id || 'System';
           if (prevRep || existing?.salesName) {
             updateData.previousAssignedTo = prevRep || existing?.salesName;
           }
@@ -1180,8 +1216,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
               fromRepName: existing?.salesName || existing?.salesRep || undefined,
               toRep: nextRep,
               toRepName: updateData.salesName || updateData.salesRep || nextRep,
-              assignedBy: currentUser?.id,
-              assignedByName: currentUser?.name || currentUser?.email || 'System',
+              assignedBy: currentUserRef.current?.id,
+              assignedByName: currentUserRef.current?.name || currentUserRef.current?.email || 'System',
               timestamp: transferTs,
             },
           ];
@@ -1219,16 +1255,16 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
 
-      const clientName = baseClients.find(c => c.id === id)?.name || id;
-      addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);
+      const clientName = baseClientsRef.current.find(c => c.id === id)?.name || id;
+      addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUserRef.current?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `clients/${id}`, true);
     }
-  };
+  }, [createPortalAccount]);
 
-  const deleteClient = async (id: string) => {
+  const deleteClient = useCallback(async (id: string) => {
     try {
-      const client = baseClients.find(c => c.id === id);
+      const client = baseClientsRef.current.find(c => c.id === id);
       const clientName = client?.name || id;
       
       const batch = writeBatch(db);
@@ -1238,7 +1274,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       if (client?.linkedClientIds && client.linkedClientIds.length > 0) {
         for (const siblingId of client.linkedClientIds) {
           if (siblingId === id) continue;
-          const sibling = baseClients.find(c => c.id === siblingId);
+          const sibling = baseClientsRef.current.find(c => c.id === siblingId);
           if (sibling) {
             const sibLinks = (sibling.linkedClientIds || []).filter(lid => lid !== id);
             batch.update(doc(db, 'clients', siblingId), { 
@@ -1251,13 +1287,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       await batch.commit();
 
-      await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName}`, currentUser?.name);
+      await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName}`, currentUserRef.current?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `clients/${id}`, true);
     }
-  };
+  }, []);
 
-  const deleteMultipleClients = async (ids: string[]) => {
+  const deleteMultipleClients = useCallback(async (ids: string[]) => {
     try {
       let batch = writeBatch(db);
       let count = 0;
@@ -1265,11 +1301,11 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         batch.delete(doc(db, 'clients', id));
         count++;
 
-        const client = baseClients.find(c => c.id === id);
+        const client = baseClientsRef.current.find(c => c.id === id);
         if (client?.linkedClientIds && client.linkedClientIds.length > 0) {
           for (const siblingId of client.linkedClientIds) {
             if (ids.includes(siblingId) || siblingId === id) continue; // Will be deleted anyway
-            const sibling = baseClients.find(c => c.id === siblingId);
+            const sibling = baseClientsRef.current.find(c => c.id === siblingId);
             if (sibling) {
               const sibLinks = (sibling.linkedClientIds || []).filter(lid => !ids.includes(lid) && lid !== id);
               batch.update(doc(db, 'clients', siblingId), { 
@@ -1288,15 +1324,15 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
       if (count > 0) await batch.commit();
-      await addAuditLog('DELETE', 'CLIENT', 'bulk', `Deleted ${ids.length} clients/leads`, currentUser?.name);
+      await addAuditLog('DELETE', 'CLIENT', 'bulk', `Deleted ${ids.length} clients/leads`, currentUserRef.current?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'clients/bulk', true);
     }
-  };
+  }, []);
 
-  const addComment = async (clientId: string, text: string, author?: string) => {
+  const addComment = useCallback(async (clientId: string, text: string, author?: string) => {
     try {
-      const commentAuthor = author || currentUser?.name || 'Admin';
+      const commentAuthor = author || currentUserRef.current?.name || 'Admin';
       const nowIso = new Date().toISOString();
       const commentData = {
         text,
@@ -1318,13 +1354,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/comments`, true);
     }
-  };
+  }, []);
 
-  const addInteraction = async (
+  const addInteraction = useCallback(async (
     clientId: string,
     interaction: Omit<InteractionLog, 'id' | 'author'>
   ) => {
-    if (!currentUser) {
+    const user = currentUserRef.current;
+    if (!user) {
       console.warn('addInteraction called without currentUser');
       return;
     }
@@ -1336,7 +1373,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       const lastCallObj = {
         text: summaryText,
         date: nowIso,
-        author: currentUser.name,
+        author: user.name,
         outcome: interaction.outcome,
         type: interaction.type,
       };
@@ -1345,7 +1382,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         lastCall: lastCallObj,
         lastCallText: summaryText,
         lastCallDate: nowIso,
-        lastCallBy: currentUser.name,
+        lastCallBy: user.name,
       };
       if (interaction.nextFollowUp) {
         docUpdates.nextReminderDate = interaction.nextFollowUp;
@@ -1358,14 +1395,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       await addDoc(collection(db, 'clients', clientId, 'interactions'), {
         ...interaction,
-        author: currentUser.name,
+        author: user.name,
         date: nowIso,
       });
       await updateDoc(doc(db, 'clients', clientId), docUpdates);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/interactions`, true);
     }
-  };
+  }, []);
 
 
 
