@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PTPackageRecord, Client, User, PT_CAPACITY_LIMITS } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
@@ -18,7 +18,7 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
       setLoading(false);
       return;
     }
-    const q = query(collection(db, 'sessions'));
+    const q = query(collection(db, 'sessions'), limit(300));
     const unsub = onSnapshot(
       q,
       (snapshot) => {

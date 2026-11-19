@@ -8,8 +8,23 @@ import {
   getTenantInfoForHost,
   getRequestHostname,
 } from '../utils/tenantDb.js';
+import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota.js';
+import {
+  isQuotaShieldActive,
+  markQuotaExhausted,
+  recordFirestoreReads,
+} from '../utils/sparkQuotaShield.js';
 
 export const desktopSyncRouter = Router();
+
+const CACHE_TTL_15M_MS = 15 * 60_000;
+const SYNC_PULL_CACHE_TTL_MS = 60_000;
+const LAST_SEEN_THROTTLE_MS = 10 * 60_000;
+
+const staffUserCache = new Map<string, { value: { uid: string; email?: string; role?: string; name?: string } | null; expiresAt: number }>();
+const webDeviceRevokeCache = new Map<string, { revoked: boolean; registeredAt?: string; expiresAt: number }>();
+const deviceAuthCache = new Map<string, { device: AuthenticatedDevice; deviceRef: FirebaseFirestore.DocumentReference; lastSeenUpdatedAt: number; expiresAt: number }>();
+const syncPullCache = new Map<string, { payload: any; expiresAt: number }>();
 
 const PLATFORM_SUPER_ADMIN_EMAIL = 'michaelmitry13@gmail.com';
 
@@ -94,6 +109,7 @@ async function authenticateStaffUser(
   if (!token) return null;
 
   try {
+    const resolvedTenantId = await getTenantIdForRequest(req).catch(() => 'inzanathletics');
     const tenantAuth = await getAuthForRequest(req);
     const decoded = await tenantAuth.verifyIdToken(token);
     if (decoded.email === PLATFORM_SUPER_ADMIN_EMAIL) {
@@ -105,19 +121,45 @@ async function authenticateStaffUser(
       };
     }
 
+    const claimRole = typeof (decoded as any).role === 'string' ? String((decoded as any).role).trim() : '';
+    if ((decoded as any).tenantId === resolvedTenantId && claimRole.length > 0) {
+      return {
+        uid: decoded.uid,
+        email: decoded.email,
+        role: claimRole,
+        name: (decoded as any).name || decoded.email || undefined,
+      };
+    }
+
+    const cacheKey = `${resolvedTenantId}:${decoded.uid}`;
+    const now = Date.now();
+    const cached = staffUserCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+
     const userDoc = await db.collection('users').doc(decoded.uid).get();
+    recordFirestoreReads(resolvedTenantId, 1);
     if (userDoc.exists) {
       const udata = userDoc.data();
-      return {
+      const resolved = {
         uid: decoded.uid,
         email: decoded.email,
         role: udata?.role || 'staff',
         name: udata?.name || (decoded as any).name || undefined,
       };
+      staffUserCache.set(cacheKey, { value: resolved, expiresAt: now + CACHE_TTL_15M_MS });
+      return resolved;
     }
 
+    staffUserCache.set(cacheKey, { value: null, expiresAt: now + 60_000 });
     return null;
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaOrUnavailableError(err)) {
+      const tid = await getTenantIdForRequest(req).catch(() => 'inzanathletics');
+      markQuotaExhausted(tid, (err as Error)?.message);
+      throw err;
+    }
     // Development / automated test harness token support
     if (
       process.env.NODE_ENV !== 'production' &&
@@ -157,10 +199,22 @@ async function authenticateDevice(
 
     const deviceId = (rawDeviceId && String(rawDeviceId).trim()) || `web-${staffUser.uid}`;
     const deviceRef = db.collection('desktop_devices').doc(deviceId);
+    const webCacheKey = `${resolvedTenantId}:${deviceId}`;
+    const nowMs = Date.now();
+    let webRevokeEntry = webDeviceRevokeCache.get(webCacheKey);
 
-    // If an explicit hardware/device ID was specified, ensure it isn't revoked
-    const existingDoc = await deviceRef.get().catch(() => null);
-    if (existingDoc && existingDoc.exists && existingDoc.data()?.status === 'revoked') {
+    if (!webRevokeEntry || webRevokeEntry.expiresAt <= nowMs) {
+      const existingDoc = await deviceRef.get().catch(() => null);
+      if (existingDoc) recordFirestoreReads(resolvedTenantId, 1);
+      webRevokeEntry = {
+        revoked: Boolean(existingDoc && existingDoc.exists && existingDoc.data()?.status === 'revoked'),
+        registeredAt: existingDoc && existingDoc.exists ? existingDoc.data()?.registeredAt : undefined,
+        expiresAt: nowMs + CACHE_TTL_15M_MS,
+      };
+      webDeviceRevokeCache.set(webCacheKey, webRevokeEntry);
+    }
+
+    if (webRevokeEntry.revoked) {
       return {
         success: false,
         status: 403,
@@ -179,7 +233,7 @@ async function authenticateDevice(
       tenantId: resolvedTenantId,
       deviceToken: 'web-staff-session',
       status: 'active',
-      registeredAt: existingDoc && existingDoc.exists ? existingDoc.data()?.registeredAt || now : now,
+      registeredAt: webRevokeEntry.registeredAt || now,
       lastSeenAt: now,
       registeredBy: {
         uid: staffUser.uid,
@@ -224,7 +278,21 @@ async function authenticateDevice(
   }
 
   const deviceRef = db.collection('desktop_devices').doc(deviceId);
+  const deviceCacheKey = `${resolvedTenantId}:${deviceId}:${deviceToken}`;
+  const nowMs = Date.now();
+  const cachedDevice = deviceAuthCache.get(deviceCacheKey);
+  if (cachedDevice && cachedDevice.expiresAt > nowMs) {
+    if (nowMs - cachedDevice.lastSeenUpdatedAt > LAST_SEEN_THROTTLE_MS) {
+      cachedDevice.lastSeenUpdatedAt = nowMs;
+      deviceRef
+        .update({ lastSeenAt: new Date(nowMs).toISOString() })
+        .catch((err) => console.error('[DesktopSync] Error updating lastSeenAt:', err));
+    }
+    return { success: true, device: cachedDevice.device, deviceRef };
+  }
+
   const deviceDoc = await deviceRef.get();
+  recordFirestoreReads(resolvedTenantId, 1);
 
   if (!deviceDoc.exists) {
     return {
@@ -254,6 +322,13 @@ async function authenticateDevice(
       message: 'Device authentication token mismatch.',
     };
   }
+
+  deviceAuthCache.set(deviceCacheKey, {
+    device: deviceData,
+    deviceRef,
+    lastSeenUpdatedAt: nowMs,
+    expiresAt: nowMs + CACHE_TTL_15M_MS,
+  });
 
   // Update last seen asynchronously
   deviceRef
@@ -1007,9 +1082,10 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
 // 5. GET /sync/pull
 // ===============================================================
 desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
+  let resolvedTenantId = 'inzanathletics';
   try {
     const db = (req as any)._testDb || (await getDbForRequest(req));
-    const resolvedTenantId = await getTenantIdForRequest(req);
+    resolvedTenantId = await getTenantIdForRequest(req);
 
     // Authenticate device
     const authResult = await authenticateDevice(req, db, resolvedTenantId);
@@ -1018,8 +1094,27 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
     }
 
     const limitParam = Number(req.query.limit);
-    const limit = Math.min(Math.max(isNaN(limitParam) ? 1000 : limitParam, 1), 2000);
+    const limit = Math.min(Math.max(isNaN(limitParam) ? 250 : limitParam, 1), 1000);
     const cursor = typeof req.query.cursor === 'string' && req.query.cursor.trim() ? req.query.cursor.trim() : null;
+    const cacheKey = `${resolvedTenantId}:${cursor || ''}:${limit}`;
+    const nowMs = Date.now();
+    const cachedPull = syncPullCache.get(cacheKey);
+
+    if (isQuotaShieldActive(resolvedTenantId)) {
+      if (cachedPull) {
+        res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+        return res.status(200).json(cachedPull.payload);
+      }
+      return res.status(503).json({
+        error: 'FIRESTORE_QUOTA_EXCEEDED',
+        code: 'FIRESTORE_QUOTA_EXCEEDED',
+        message: 'Database temporarily busy (quota shield active). Please retry shortly.',
+      });
+    }
+
+    if (cachedPull && cachedPull.expiresAt > nowMs) {
+      return res.status(200).json(cachedPull.payload);
+    }
 
     const items: SyncItem[] = [];
 
@@ -1033,10 +1128,16 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           .orderBy('updatedAt', 'asc')
           .limit(limit)
           .get()
-          .catch(async () => {
-            // Fallback if updatedAt index is not available or records lack updatedAt
-            return db.collection('clients').limit(limit).get();
+          .catch(async (err: unknown) => {
+            if (isFirestoreQuotaOrUnavailableError(err)) throw err;
+            // Bounded status fallback if updatedAt index is missing; never scan unfiltered collection
+            return db
+              .collection('clients')
+              .where('status', 'in', ['Active', 'Hold', 'Nearly Expired'])
+              .limit(limit)
+              .get();
           });
+        recordFirestoreReads(resolvedTenantId, Math.max(1, clientSnap.size));
 
         for (const doc of clientSnap.docs) {
           const data = doc.data();
@@ -1068,6 +1169,7 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           .collection('clients')
           .limit(limit)
           .get();
+        recordFirestoreReads(resolvedTenantId, Math.max(1, clientSnap.size));
 
         for (const doc of clientSnap.docs) {
           const data = doc.data();
@@ -1092,6 +1194,7 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
         }
       }
     } catch (clientErr) {
+      if (isFirestoreQuotaOrUnavailableError(clientErr)) throw clientErr;
       console.error('[DesktopSync] Error pulling clients:', clientErr);
     }
 
@@ -1104,9 +1207,11 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           .orderBy('date', 'asc')
           .limit(limit)
           .get()
-          .catch(async () => {
+          .catch(async (err: unknown) => {
+            if (isFirestoreQuotaOrUnavailableError(err)) throw err;
             return db.collection('attendance').orderBy('date', 'desc').limit(limit).get();
           });
+        recordFirestoreReads(resolvedTenantId, Math.max(1, attendanceSnap.size));
 
         for (const doc of attendanceSnap.docs) {
           const data = doc.data();
@@ -1130,9 +1235,11 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           .orderBy('date', 'desc')
           .limit(limit)
           .get()
-          .catch(async () => {
+          .catch(async (err: unknown) => {
+            if (isFirestoreQuotaOrUnavailableError(err)) throw err;
             return db.collection('attendance').limit(limit).get();
           });
+        recordFirestoreReads(resolvedTenantId, Math.max(1, attendanceSnap.size));
 
         for (const doc of attendanceSnap.docs) {
           const data = doc.data();
@@ -1148,6 +1255,7 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
         }
       }
     } catch (attendanceErr) {
+      if (isFirestoreQuotaOrUnavailableError(attendanceErr)) throw attendanceErr;
       console.error('[DesktopSync] Error pulling attendance:', attendanceErr);
     }
 
@@ -1160,9 +1268,11 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           .orderBy('updatedAt', 'asc')
           .limit(limit)
           .get()
-          .catch(async () => {
+          .catch(async (err: unknown) => {
+            if (isFirestoreQuotaOrUnavailableError(err)) throw err;
             return db.collection('packages').limit(limit).get();
           });
+        recordFirestoreReads(resolvedTenantId, Math.max(1, pkgSnap.size));
 
         for (const doc of pkgSnap.docs) {
           const data = doc.data();
@@ -1186,6 +1296,7 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
       } else {
         // Initial sync: pull packages
         const pkgSnap = await db.collection('packages').limit(limit).get();
+        recordFirestoreReads(resolvedTenantId, Math.max(1, pkgSnap.size));
 
         for (const doc of pkgSnap.docs) {
           const data = doc.data();
@@ -1205,6 +1316,7 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
         }
       }
     } catch (packageErr) {
+      if (isFirestoreQuotaOrUnavailableError(packageErr)) throw packageErr;
       console.error('[DesktopSync] Error pulling packages:', packageErr);
     }
 
@@ -1218,13 +1330,32 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
         ? pagedItems[pagedItems.length - 1]!.serverUpdatedAt
         : cursor;
 
-    return res.status(200).json({
+    const payload = {
       items: pagedItems,
       nextCursor,
       hasMore,
       serverTime: new Date().toISOString(),
-    });
+    };
+    syncPullCache.set(cacheKey, { payload, expiresAt: Date.now() + SYNC_PULL_CACHE_TTL_MS });
+
+    return res.status(200).json(payload);
   } catch (error) {
+    if (isFirestoreQuotaOrUnavailableError(error)) {
+      markQuotaExhausted(resolvedTenantId, (error as Error)?.message);
+      const limitParam = Number(req.query.limit);
+      const limit = Math.min(Math.max(isNaN(limitParam) ? 250 : limitParam, 1), 1000);
+      const cursor = typeof req.query.cursor === 'string' && req.query.cursor.trim() ? req.query.cursor.trim() : null;
+      const stale = syncPullCache.get(`${resolvedTenantId}:${cursor || ''}:${limit}`);
+      if (stale) {
+        res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+        return res.status(200).json(stale.payload);
+      }
+      return res.status(503).json({
+        error: 'FIRESTORE_QUOTA_EXCEEDED',
+        code: 'FIRESTORE_QUOTA_EXCEEDED',
+        message: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+      });
+    }
     console.error('[DesktopSync] Error in /sync/pull:', error);
     return res.status(500).json({ error: 'INTERNAL_ERROR', message: (error as Error).message });
   }

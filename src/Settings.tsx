@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import NotificationTemplateSettings from './components/NotificationTemplateSettings';
 import TwilioBroadcastManager from './components/TwilioBroadcastManager';
+import QuotaShieldCard from './components/QuotaShieldCard';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates, features } = useAppContext();
@@ -1525,6 +1526,9 @@ export default function Settings() {
         {/* ── Backup ── */}
         <TabsContent value="backup" className="animate-in fade-in-50 duration-500">
           <div className="grid gap-6 md:grid-cols-2">
+            {['crm_admin', 'super_admin', 'admin', 'manager'].includes((currentUser?.role || '').toLowerCase()) && (
+              <QuotaShieldCard />
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Download My Backup Station</CardTitle>

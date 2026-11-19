@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, where, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ClassBooking, BookingStatus } from '../types/class';
 import { isBookingCutoffExceeded, AppError } from '../utils/bookingCutoff';
@@ -12,10 +12,10 @@ export function useClassBookings(classId?: string) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let q = query(collection(db, 'classBookings'));
+    let q = query(collection(db, 'classBookings'), limit(250));
     
     if (classId) {
-      q = query(collection(db, 'classBookings'), where('classId', '==', classId));
+      q = query(collection(db, 'classBookings'), where('classId', '==', classId), limit(250));
     }
     
     const unsubscribe = onSnapshot(q, (snapshot) => {

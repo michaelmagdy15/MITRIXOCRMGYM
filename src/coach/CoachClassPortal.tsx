@@ -39,8 +39,10 @@ export default function CoachClassPortal() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // Fetch classes and filter by coach ID or Name
-    const unsub = onSnapshot(collection(db, 'classSchedules'), (snap) => {
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Fetch recent & upcoming classes (30d window) and filter by coach ID or Name
+    const classesQ = query(collection(db, 'classSchedules'), where('date', '>=', thirtyDaysAgoStr));
+    const unsub = onSnapshot(classesQ, (snap) => {
       const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as ClassSchedule));
       
       const now = new Date();

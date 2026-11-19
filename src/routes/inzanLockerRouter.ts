@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAdminAppForProject, getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
 import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota.js';
+import { isQuotaShieldActive, markQuotaExhausted, recordFirestoreReads } from '../utils/sparkQuotaShield.js';
 
 export const inzanLockerRouter = Router();
 
@@ -39,6 +40,7 @@ let cachedJwt: { token: string; baseUrl: string; expiresAt: number } | null = nu
 let lastLockerConfigQuotaErrAt = 0;
 
 const inzanCallerCache = new Map<string, { caller: AuthenticatedCaller; expiresAt: number }>();
+const memberStatusCache = new Map<string, { payload: any; expiresAt: number }>();
 const INZAN_CALLER_CACHE_TTL_MS = 15 * 60_000;
 const INZAN_CALLER_CACHE_MAX = 2000;
 
@@ -183,6 +185,7 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
   try {
     const inzanDb = getInzanFirestore();
     const userSnap = await inzanDb.collection('users').doc(decoded.uid).get();
+    recordFirestoreReads('inzanathletics', 1);
     const userData = userSnap.exists ? userSnap.data() : null;
 
     const role = String(
@@ -202,6 +205,7 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
         .where('portalUserId', '==', decoded.uid)
         .limit(1)
         .get();
+      recordFirestoreReads('inzanathletics', Math.max(1, clientQuery.size));
       if (!clientQuery.empty) {
         const doc = clientQuery.docs[0]!;
         clientDocId = doc.id;
@@ -220,6 +224,7 @@ async function authenticateInzanCaller(req: Request): Promise<AuthenticatedCalle
     });
   } catch (err) {
     if (isFirestoreQuotaOrUnavailableError(err)) {
+      markQuotaExhausted('inzanathletics', (err as any)?.message);
       const quotaErr: any = new Error('Database temporarily busy (quota exceeded). Please retry shortly.');
       quotaErr.status = 503;
       quotaErr.code = 'FIRESTORE_QUOTA_EXCEEDED';
@@ -446,7 +451,7 @@ async function getLockerServerConfig(forceRefresh = false): Promise<LockerServer
   if (!forceRefresh && cachedConfig && now - cachedConfig.fetchedAt < CONFIG_TTL_MS) {
     return cachedConfig.config;
   }
-  if (lastLockerConfigQuotaErrAt > 0 && now - lastLockerConfigQuotaErrAt < 5 * 60_000) {
+  if ((lastLockerConfigQuotaErrAt > 0 && now - lastLockerConfigQuotaErrAt < 5 * 60_000) || isQuotaShieldActive('inzanathletics')) {
     if (cachedConfig) return cachedConfig.config;
     return {
       baseUrl: (process.env.INZAN_LOCKER_URL || DEFAULT_LOCKER_BASE_URL).replace(/\/+$/, ''),
@@ -462,6 +467,7 @@ async function getLockerServerConfig(forceRefresh = false): Promise<LockerServer
   try {
     const inzanDb = getInzanFirestore();
     const snap = await inzanDb.collection('settings').doc('inzan_locker_config').get();
+    recordFirestoreReads('inzanathletics', 1);
     if (snap.exists) {
       const data = snap.data();
       storedBaseUrl = String(data?.baseUrl || '').trim();
@@ -471,6 +477,7 @@ async function getLockerServerConfig(forceRefresh = false): Promise<LockerServer
   } catch (err) {
     if (isFirestoreQuotaOrUnavailableError(err)) {
       lastLockerConfigQuotaErrAt = Date.now();
+      markQuotaExhausted('inzanathletics', (err as any)?.message);
     }
     console.error('[API] [InzanLockers] Failed reading settings/inzan_locker_config:', err);
   }
@@ -2692,6 +2699,20 @@ inzanLockerRouter.get('/member-status', async (req: Request, res: Response) => {
       return;
     }
 
+    if (isQuotaShieldActive('inzanathletics')) {
+      const stale = memberStatusCache.get(requestedClientId);
+      if (stale) {
+        res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+        res.json(stale.payload);
+        return;
+      }
+      res.status(503).json({
+        error: 'Database temporarily busy (quota shield active). Please retry shortly.',
+        code: 'FIRESTORE_QUOTA_EXCEEDED',
+      });
+      return;
+    }
+
     const [lockersRes, usersRes, groupsRes] = await Promise.all([
       lockerApiRequest('/api/lockers'),
       lockerApiRequest('/api/users'),
@@ -2708,6 +2729,7 @@ inzanLockerRouter.get('/member-status', async (req: Request, res: Response) => {
       .where('assignedTo', '==', requestedClientId)
       .limit(5)
       .get();
+    recordFirestoreReads('inzanathletics', Math.max(1, fsQuery.size));
 
     let fsDoc: Record<string, any> | null = null;
     if (!fsQuery.empty) {
@@ -2763,7 +2785,7 @@ inzanLockerRouter.get('/member-status', async (req: Request, res: Response) => {
       };
     });
 
-    res.json({
+    const payload = {
       ok: true,
       assignedLocker,
       occupant: assignedLocker ? occupant : null,
@@ -2772,13 +2794,29 @@ inzanLockerRouter.get('/member-status', async (req: Request, res: Response) => {
       expiresAt: assignedLocker ? occupant?.valid_until || fsDoc?.expiresAt || null : null,
       unlockUrl: `${lockersRes.baseUrl}/unlock`,
       groups: groupsSummary,
-    });
+    };
+    memberStatusCache.set(requestedClientId, { payload, expiresAt: Date.now() + 5 * 60_000 });
+    res.json(payload);
   } catch (err: any) {
     console.error('[API] [InzanLockers] GET /member-status error:', err);
-    const status = isFirestoreQuotaOrUnavailableError(err) ? 503 : (err.status || 500);
+    if (isFirestoreQuotaOrUnavailableError(err)) {
+      markQuotaExhausted('inzanathletics', err?.message);
+      const clientKey = String(req.query.clientId || '').trim();
+      const stale = clientKey ? memberStatusCache.get(clientKey) : undefined;
+      if (stale) {
+        res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+        res.json(stale.payload);
+        return;
+      }
+      res.status(503).json({
+        error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
+        code: 'FIRESTORE_QUOTA_EXCEEDED',
+      });
+      return;
+    }
+    const status = err.status || 500;
     res.status(status).json({
-      error: status === 503 ? 'Database temporarily busy (quota exceeded). Please retry shortly.' : (err.message || 'Failed to fetch member locker status'),
-      ...(status === 503 ? { code: 'FIRESTORE_QUOTA_EXCEEDED' } : {}),
+      error: err.message || 'Failed to fetch member locker status',
     });
   }
 });

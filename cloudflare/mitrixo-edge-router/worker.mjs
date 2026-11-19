@@ -30,12 +30,20 @@ export default {
 
     if (event.cron === '01 22 * * *') {
       ctx.waitUntil(
-        fetch(`${gatewayOrigin}/api/cron/membership-expiration`, {
-          method: 'POST',
-          headers: {
-            'x-cron-secret': env.CRON_SECRET || '',
-          },
-        }).catch(() => {})
+        Promise.allSettled([
+          fetch(`${gatewayOrigin}/api/cron/membership-expiration`, {
+            method: 'POST',
+            headers: {
+              'x-cron-secret': env.CRON_SECRET || '',
+            },
+          }),
+          fetch(`${gatewayOrigin}/api/cron/nightly-backup`, {
+            method: 'POST',
+            headers: {
+              'x-cron-secret': env.CRON_SECRET || '',
+            },
+          }),
+        ]).catch(() => {})
       );
       return;
     }

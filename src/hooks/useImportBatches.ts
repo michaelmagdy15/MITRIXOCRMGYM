@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../firebase';
-import { collection, onSnapshot, doc, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, writeBatch, query, limit } from 'firebase/firestore';
 import { ImportBatch, Client, Payment, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -16,7 +16,8 @@ export const useImportBatches = (currentUser: User | null, clients: Client[], pa
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(collection(db, 'importBatches'), (snapshot) => {
+    const q = query(collection(db, 'importBatches'), limit(30));
+    const unsub = onSnapshot(q, (snapshot) => {
       setImportBatches(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ImportBatch)));
       setLoading(false);
     }, (error) => {

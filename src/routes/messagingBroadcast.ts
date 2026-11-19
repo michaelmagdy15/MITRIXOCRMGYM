@@ -5,6 +5,7 @@ import {
 } from '../utils/tenantDb.js';
 import { convertArabicNumerals } from '../utils/phoneUtils.js';
 import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota.js';
+import { isQuotaShieldActive, markQuotaExhausted, recordFirestoreReads } from '../utils/sparkQuotaShield.js';
 
 export type BroadcastChannel = 'whatsapp' | 'sms';
 export type BroadcastAudience =
@@ -512,6 +513,7 @@ export function createMessagingBroadcastRouter(
     if (!isSuper && !allowedRoles.includes(role)) {
       try {
         const userDoc = await db.collection('users').doc(user.uid).get();
+        recordFirestoreReads(tenantId, 1);
         const userData = userDoc.data() || {};
         role = String(userData.role || role).toLowerCase();
         callerName = String(userData.name || callerName);
@@ -521,6 +523,7 @@ export function createMessagingBroadcastRouter(
         }
       } catch (err: any) {
         if (isFirestoreQuotaOrUnavailableError(err)) {
+          markQuotaExhausted(tenantId, err?.message);
           res.status(503).json({
             error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
             code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -539,6 +542,8 @@ export function createMessagingBroadcastRouter(
    * Returns masked Twilio credentials, default sender branding, and live deduplicated audience counts + cost estimates.
    */
   router.get('/config', requireAuthMiddleware, async (req, res) => {
+    let ctxTenantId = '';
+    let configCacheKey = '';
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
@@ -547,13 +552,23 @@ export function createMessagingBroadcastRouter(
       const normalizedBranch =
         branchFilter && branchFilter !== 'ALL' ? branchFilter.trim() : null;
       const cacheKey = `${ctx.tenantId}:${normalizedBranch || 'ALL'}`;
+      ctxTenantId = ctx.tenantId;
+      configCacheKey = cacheKey;
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
       const now = Date.now();
-      if (!forceRefresh) {
-        const cached = configResponseCache.get(cacheKey);
-        if (cached && cached.expiresAt > now) {
-          return res.json(cached.payload);
+      const stale = configResponseCache.get(cacheKey);
+      if (isQuotaShieldActive(ctx.tenantId)) {
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
         }
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota shield active). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
+      if (!forceRefresh && stale && stale.expiresAt > now) {
+        return res.json(stale.payload);
       }
 
       const config = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
@@ -575,6 +590,7 @@ export function createMessagingBroadcastRouter(
         baseClients.count().get(),
         ctx.db.collection('secrets_config').doc('drone_shoot_list').get().catch(() => null),
       ]);
+      recordFirestoreReads(ctx.tenantId, 6);
 
       const droneListRecipients = Array.isArray(droneListDoc?.data()?.recipients)
         ? droneListDoc!.data()!.recipients
@@ -609,6 +625,12 @@ export function createMessagingBroadcastRouter(
     } catch (err: any) {
       console.error('[API Messaging] Error loading config:', err);
       if (isFirestoreQuotaOrUnavailableError(err)) {
+        if (ctxTenantId) markQuotaExhausted(ctxTenantId, err?.message);
+        const stale = configCacheKey ? configResponseCache.get(configCacheKey) : undefined;
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
+        }
         return res.status(503).json({
           error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
           code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -1048,17 +1070,27 @@ export function createMessagingBroadcastRouter(
    * Returns the 20 most recent WhatsApp/SMS broadcast campaigns for this tenant.
    */
   router.get('/history', requireAuthMiddleware, async (req, res) => {
+    let ctxTenantId = '';
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
+      ctxTenantId = ctx.tenantId;
 
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
       const now = Date.now();
-      if (!forceRefresh) {
-        const cached = historyResponseCache.get(ctx.tenantId);
-        if (cached && cached.expiresAt > now) {
-          return res.json(cached.payload);
+      const stale = historyResponseCache.get(ctx.tenantId);
+      if (isQuotaShieldActive(ctx.tenantId)) {
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
         }
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota shield active). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
+      if (!forceRefresh && stale && stale.expiresAt > now) {
+        return res.json(stale.payload);
       }
 
       const snap = await ctx.db
@@ -1066,6 +1098,7 @@ export function createMessagingBroadcastRouter(
         .orderBy('createdAt', 'desc')
         .limit(20)
         .get();
+      recordFirestoreReads(ctx.tenantId, Math.max(1, snap.size));
 
       const history = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const payload = { history };
@@ -1074,6 +1107,12 @@ export function createMessagingBroadcastRouter(
     } catch (err: any) {
       console.error('[API Messaging] History error:', err);
       if (isFirestoreQuotaOrUnavailableError(err)) {
+        if (ctxTenantId) markQuotaExhausted(ctxTenantId, err?.message);
+        const stale = ctxTenantId ? historyResponseCache.get(ctxTenantId) : undefined;
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
+        }
         return res.status(503).json({
           error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
           code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -1089,17 +1128,27 @@ export function createMessagingBroadcastRouter(
    * matching each sender phone number against the tenant's member database (Name + Member ID).
    */
   router.get('/replies', requireAuthMiddleware, async (req, res) => {
+    let ctxTenantId = '';
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
+      ctxTenantId = ctx.tenantId;
 
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
       const now = Date.now();
-      if (!forceRefresh) {
-        const cached = repliesResponseCache.get(ctx.tenantId);
-        if (cached && cached.expiresAt > now) {
-          return res.json(cached.payload);
+      const stale = repliesResponseCache.get(ctx.tenantId);
+      if (isQuotaShieldActive(ctx.tenantId)) {
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
         }
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota shield active). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
+      if (!forceRefresh && stale && stale.expiresAt > now) {
+        return res.json(stale.payload);
       }
 
       const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
@@ -1241,6 +1290,12 @@ export function createMessagingBroadcastRouter(
     } catch (err: any) {
       console.error('[API Messaging] Replies error:', err);
       if (isFirestoreQuotaOrUnavailableError(err)) {
+        if (ctxTenantId) markQuotaExhausted(ctxTenantId, err?.message);
+        const stale = ctxTenantId ? repliesResponseCache.get(ctxTenantId) : undefined;
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
+        }
         return res.status(503).json({
           error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
           code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -1257,17 +1312,27 @@ export function createMessagingBroadcastRouter(
    * 2. Real-time delivery receipt breakdown (read / delivered / sent / queued / undelivered 63016 / failed 63007)
    */
   router.get('/live-status', requireAuthMiddleware, async (req, res) => {
+    let ctxTenantId = '';
     try {
       const ctx = await ensureAdminOrManager(req, res);
       if (!ctx) return;
+      ctxTenantId = ctx.tenantId;
 
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
       const now = Date.now();
-      if (!forceRefresh) {
-        const cached = liveStatusResponseCache.get(ctx.tenantId);
-        if (cached && cached.expiresAt > now) {
-          return res.json(cached.payload);
+      const stale = liveStatusResponseCache.get(ctx.tenantId);
+      if (isQuotaShieldActive(ctx.tenantId)) {
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
         }
+        return res.status(503).json({
+          error: 'Database temporarily busy (quota shield active). Please retry shortly.',
+          code: 'FIRESTORE_QUOTA_EXCEEDED',
+        });
+      }
+      if (!forceRefresh && stale && stale.expiresAt > now) {
+        return res.json(stale.payload);
       }
 
       const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
@@ -1493,6 +1558,12 @@ export function createMessagingBroadcastRouter(
     } catch (err: any) {
       console.error('[API Messaging] Live status error:', err);
       if (isFirestoreQuotaOrUnavailableError(err)) {
+        if (ctxTenantId) markQuotaExhausted(ctxTenantId, err?.message);
+        const stale = ctxTenantId ? liveStatusResponseCache.get(ctxTenantId) : undefined;
+        if (stale) {
+          res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+          return res.json(stale.payload);
+        }
         return res.status(503).json({
           error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
           code: 'FIRESTORE_QUOTA_EXCEEDED',

@@ -14,6 +14,20 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { isFirestoreQuotaOrUnavailableError } from './src/utils/firestoreQuota.js';
 import {
+  getQuotaStatus,
+  isQuotaShieldActive,
+  markQuotaExhausted,
+  recordFirestoreReads,
+  resetQuotaShieldProbe,
+  shouldDeferBackgroundJob,
+} from './src/utils/sparkQuotaShield.js';
+import {
+  getBackupMeta,
+  getCachedBackupSnapshot,
+  isCloudBackupConfigured,
+  runIncrementalCloudBackup,
+} from './src/services/quotaBackupService.js';
+import {
   defaultFirebaseConfig,
   strikeCrmConfig,
   inzanConfig,
@@ -170,6 +184,7 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
     tenantStatus = tenantInfo.status;
   } catch (tenantErr) {
     if (isFirestoreQuotaOrUnavailableError(tenantErr)) {
+      markQuotaExhausted(hostname || 'default', (tenantErr as Error)?.message);
       res.status(503).json({
         error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
         code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -239,6 +254,7 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
         memberDb = await getDbForRequest(req);
       } catch (dbErr) {
         if (isFirestoreQuotaOrUnavailableError(dbErr)) {
+          markQuotaExhausted(resolvedTenantId, (dbErr as Error)?.message);
           res.status(503).json({
             error: 'Database temporarily busy (quota exceeded). Please retry shortly.',
             code: 'FIRESTORE_QUOTA_EXCEEDED',
@@ -252,6 +268,7 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
 
       try {
         const userDoc = await memberDb.collection('users').doc(decodedToken.uid).get();
+        recordFirestoreReads(resolvedTenantId, 1);
         if (!userDoc.exists) {
           const isMemberOnboardingPath = req.path.startsWith('/api/member/create-profile') ||
                                          req.path.startsWith('/api/member/link-profile') ||
@@ -284,6 +301,7 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
         }
       } catch (dbReadErr) {
         if (isFirestoreQuotaOrUnavailableError(dbReadErr)) {
+          markQuotaExhausted(resolvedTenantId, (dbReadErr as Error)?.message);
           const callerEmail = String(decodedToken.email || '').toLowerCase();
           if (callerEmail === PLATFORM_SUPER_ADMIN_EMAIL || callerEmail === 'magd.gallab@gmail.com') {
             memberExists = true;
@@ -302,6 +320,9 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
         }
       }
     }
+
+    (req as any).resolvedTenantId = resolvedTenantId;
+    (req as any).tenantRole = tenantRole;
 
     if (memberExists) {
       if (tenantRole && (decodedToken.role !== tenantRole || decodedToken.tenantId !== resolvedTenantId)) {
@@ -690,6 +711,7 @@ async function startServer() {
 
   // Authenticated Cron trigger for Membership Expiration (fails closed in production if CRON_SECRET is missing)
   app.post("/api/cron/membership-expiration", async (req, res) => {
+    const cronTenant = isStandaloneMode() ? 'strike' : 'inzanathletics';
     try {
       const cronSecret = process.env.CRON_SECRET;
       if (process.env.NODE_ENV === 'production' && !cronSecret) {
@@ -701,9 +723,16 @@ async function startServer() {
         return;
       }
       const force = req.query.force === 'true' || req.body?.force === true;
+      if (!force && isQuotaShieldActive(cronTenant)) {
+        res.json({ status: "skipped", reason: "QUOTA_SHIELD_ACTIVE" });
+        return;
+      }
       const results = await runAllTenantsExpirationScan({ force });
       res.json({ status: "success", results });
     } catch (err: any) {
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        markQuotaExhausted(cronTenant, err?.message);
+      }
       console.error("[Cron API] Error running membership expiration:", err);
       res.status(500).json({ error: err.message });
     }
@@ -711,6 +740,7 @@ async function startServer() {
 
   // Authenticated Cron trigger for No-Show processing
   app.post("/api/cron/no-show-check", async (req, res) => {
+    const cronTenant = isStandaloneMode() ? 'strike' : 'inzanathletics';
     try {
       const cronSecret = process.env.CRON_SECRET;
       if (process.env.NODE_ENV === 'production' && !cronSecret) {
@@ -721,9 +751,16 @@ async function startServer() {
         res.status(401).json({ error: "Unauthorized cron trigger" });
         return;
       }
+      if (shouldDeferBackgroundJob(cronTenant)) {
+        res.json({ status: "skipped", reason: "QUOTA_SHIELD_ACTIVE" });
+        return;
+      }
       await runNoShowScan();
       res.json({ status: "success", message: "No-show scan completed" });
     } catch (err: any) {
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        markQuotaExhausted(cronTenant, err?.message);
+      }
       console.error("[Cron API] Error running no-show scan:", err);
       res.status(500).json({ error: err.message });
     }
@@ -731,6 +768,7 @@ async function startServer() {
 
   // Authenticated Cron trigger for Class Reminders (90-150 min pre-class)
   app.post("/api/cron/class-reminders", async (req, res) => {
+    const cronTenant = isStandaloneMode() ? 'strike' : 'inzanathletics';
     try {
       const cronSecret = process.env.CRON_SECRET;
       if (process.env.NODE_ENV === 'production' && !cronSecret) {
@@ -741,11 +779,147 @@ async function startServer() {
         res.status(401).json({ error: "Unauthorized cron trigger" });
         return;
       }
+      if (shouldDeferBackgroundJob(cronTenant)) {
+        res.json({ status: "skipped", reason: "QUOTA_SHIELD_ACTIVE" });
+        return;
+      }
       const result = await runClassRemindersScan();
       res.json({ status: "success", ...result });
     } catch (err: any) {
+      if (isFirestoreQuotaOrUnavailableError(err)) {
+        markQuotaExhausted(cronTenant, err?.message);
+      }
       console.error("[Cron API] Error running class reminders:", err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Authenticated Cron trigger for Nightly Incremental Cloud Backup -> Cloudflare KV
+  app.post("/api/cron/nightly-backup", async (req, res) => {
+    const cronTenant = isStandaloneMode() ? 'strike' : 'inzanathletics';
+    try {
+      const cronSecret = process.env.CRON_SECRET;
+      if (process.env.NODE_ENV === 'production' && !cronSecret) {
+        res.status(401).json({ error: "CRON_SECRET not configured" });
+        return;
+      }
+      if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
+        res.status(401).json({ error: "Unauthorized cron trigger" });
+        return;
+      }
+      const cronDb = isStandaloneMode() ? getFirestore() : getDbForTenant('inzanathletics');
+      const result = await runIncrementalCloudBackup(cronTenant, cronDb);
+      res.json({ status: result.ok ? "success" : "skipped", ...result });
+    } catch (err: any) {
+      console.error("[Cron API] Error running nightly backup:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Zero-Firestore-Read Quota Shield & Cloud Backup status endpoint
+  app.get("/api/quota/status", async (req, res) => {
+    try {
+      const tenantId = await getTenantIdForRequest(req).catch(() =>
+        isStandaloneMode() ? 'strike' : 'inzanathletics'
+      );
+      const status = getQuotaStatus(tenantId);
+      const backupMeta = await getBackupMeta(tenantId);
+      res.json({
+        ok: true,
+        status,
+        backupMeta,
+        cloudBackupConfigured: isCloudBackupConfigured(),
+      });
+    } catch (err: any) {
+      console.error("[API] Error getting quota status:", err);
+      res.status(500).json({ error: err?.message || "Failed to read quota status" });
+    }
+  });
+
+  // Zero-Firestore-Read Cloud Backup Snapshot fallback for authenticated CRM staff
+  app.get("/api/quota/backup-snapshot", requireAuth, async (req, res) => {
+    try {
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+        (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const userEmail = String((req as any).user?.email || '').toLowerCase();
+      const role = String((req as any).tenantRole || (req as any).user?.role || '').toLowerCase();
+      const staffRoles = new Set([
+        'crm_admin',
+        'super_admin',
+        'admin',
+        'manager',
+        'fitness_manager',
+        'rep',
+        'coach',
+        'trainer',
+      ]);
+      const isSuper = userEmail === PLATFORM_SUPER_ADMIN_EMAIL || userEmail === 'magd.gallab@gmail.com';
+      if (!isSuper && !staffRoles.has(role)) {
+        res.status(403).json({ error: "Forbidden: Staff role required for backup snapshots." });
+        return;
+      }
+
+      const snapshot = await getCachedBackupSnapshot(tenantId);
+      if (isQuotaShieldActive(tenantId)) {
+        res.setHeader('X-Mitrixo-Quota-Shield', 'active');
+      }
+      if (!snapshot) {
+        res.status(404).json({ error: "No cloud backup snapshot found yet for this tenant." });
+        return;
+      }
+      res.json({ ok: true, snapshot });
+    } catch (err: any) {
+      console.error("[API] Error serving backup snapshot:", err);
+      res.status(500).json({ error: err?.message || "Failed to load cloud backup snapshot" });
+    }
+  });
+
+  // Admin-triggered incremental cloud backup
+  app.post("/api/admin/backup-now", requireAuth, async (req, res) => {
+    try {
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+        (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const userEmail = String((req as any).user?.email || '').toLowerCase();
+      const role = String((req as any).tenantRole || (req as any).user?.role || '').toLowerCase();
+      const isSuper = userEmail === PLATFORM_SUPER_ADMIN_EMAIL || userEmail === 'magd.gallab@gmail.com';
+      const allowed = new Set(['crm_admin', 'super_admin', 'admin', 'manager']);
+      if (!isSuper && !allowed.has(role)) {
+        res.status(403).json({ error: "Forbidden: Admin or manager role required." });
+        return;
+      }
+      const db = await getDbForRequest(req);
+      const result = await runIncrementalCloudBackup(tenantId, db, { force: true });
+      res.status(result.quotaExceeded ? 503 : 200).json(result);
+    } catch (err: any) {
+      console.error("[API] Admin backup-now error:", err);
+      res.status(500).json({ error: err?.message || "Failed to run cloud backup" });
+    }
+  });
+
+  // Admin manual Quota Shield probe reset
+  app.post("/api/admin/quota-reset", requireAuth, async (req, res) => {
+    try {
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+        (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const userEmail = String((req as any).user?.email || '').toLowerCase();
+      const role = String((req as any).tenantRole || (req as any).user?.role || '').toLowerCase();
+      const isSuper = userEmail === PLATFORM_SUPER_ADMIN_EMAIL || userEmail === 'magd.gallab@gmail.com';
+      const allowed = new Set(['crm_admin', 'super_admin', 'admin', 'manager']);
+      if (!isSuper && !allowed.has(role)) {
+        res.status(403).json({ error: "Forbidden: Admin or manager role required." });
+        return;
+      }
+      const status = resetQuotaShieldProbe(tenantId);
+      res.json({ ok: true, status });
+    } catch (err: any) {
+      console.error("[API] Admin quota-reset error:", err);
+      res.status(500).json({ error: err?.message || "Failed to reset quota shield probe" });
     }
   });
 
@@ -3716,6 +3890,7 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
   });
 
   app.post('/api/auth/mobile-restore', async (req, res) => {
+    let resolvedTenantForCatch = isStandaloneMode() ? 'strike' : 'inzanathletics';
     try {
       const { mobileToken } = req.body || {};
       if (!mobileToken || typeof mobileToken !== 'string' || mobileToken.length < 32) {
@@ -3725,10 +3900,12 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
       const db = await getDbForRequest(req);
       const authClient = await getAuthForRequest(req);
       const tenantId = await getTenantIdForRequest(req);
+      resolvedTenantForCatch = tenantId || resolvedTenantForCatch;
       const crypto = await import('crypto');
       const tokenHash = crypto.createHash('sha256').update(mobileToken.trim()).digest('hex');
 
       const sessionDoc = await db.collection('mobile_auth_sessions').doc(tokenHash).get();
+      recordFirestoreReads(resolvedTenantForCatch, 1);
       if (!sessionDoc.exists) {
         return res.status(401).json({ error: 'Mobile session expired or not found.' });
       }
@@ -3749,6 +3926,7 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
       }
 
       const userDoc = await db.collection('users').doc(uid).get();
+      recordFirestoreReads(resolvedTenantForCatch, 1);
       if (userDoc.exists && userDoc.data()?.status === 'nonworking') {
         await sessionDoc.ref.delete().catch(() => {});
         return res.status(403).json({ error: 'Account has been deactivated.' });
@@ -3774,6 +3952,7 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
     } catch (error: any) {
       console.error('[API] Failed to restore mobile session:', error);
       if (isFirestoreQuotaOrUnavailableError(error)) {
+        markQuotaExhausted(resolvedTenantForCatch, error?.message);
         return res.status(503).json({
           error: 'Database temporarily busy. Please sign in normally.',
           code: 'FIRESTORE_QUOTA_EXCEEDED',

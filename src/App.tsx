@@ -253,6 +253,12 @@ function AppContent() {
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = React.useState(false);
+  const [quotaBanner, setQuotaBanner] = React.useState<{
+    state: 'conserve' | 'shield_active';
+    nextResetIso?: string;
+    reason?: string;
+    dismissed?: boolean;
+  } | null>(null);
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
   const [visitedCoreTabs, setVisitedCoreTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
@@ -309,6 +315,51 @@ function AppContent() {
     window.addEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
     return () => window.removeEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
   }, []);
+
+  // Poll zero-read Quota Shield status for non-Strike authenticated staff (15m cadence)
+  React.useEffect(() => {
+    if (!currentUser?.id || effectiveRole === 'client' || effectiveRole === 'coach') {
+      setQuotaBanner(null);
+      return;
+    }
+    const tid = getTenantId().toLowerCase();
+    if (tid.includes('strike')) {
+      setQuotaBanner(null);
+      return;
+    }
+    let cancelled = false;
+    const checkQuotaStatus = async () => {
+      try {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        const res = await fetch('/api/quota/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.status;
+        if (!cancelled && st && (st.state === 'conserve' || st.state === 'shield_active')) {
+          setQuotaBanner((prev) =>
+            prev && prev.dismissed && prev.state === st.state
+              ? prev
+              : {
+                  state: st.state,
+                  nextResetIso: st.nextResetIso,
+                  reason: st.reason,
+                  dismissed: false,
+                }
+          );
+        } else if (!cancelled && st?.state === 'normal') {
+          setQuotaBanner(null);
+        }
+      } catch {
+        // Ignore transient status fetch failure
+      }
+    };
+    void checkQuotaStatus();
+    const timer = window.setInterval(checkQuotaStatus, 15 * 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [currentUser?.id, effectiveRole]);
 
   // Autonomous 60-second background delta-sync heartbeat for front-desk offline resilience
   React.useEffect(() => {
@@ -1626,6 +1677,36 @@ function AppContent() {
 
           {/* Main scrollable viewport */}
           <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0 pb-[max(1rem,var(--safe-bottom))] ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))]">
+            {quotaBanner && !quotaBanner.dismissed && (
+              <div
+                className={`mb-4 rounded-xl border px-4 py-2.5 flex items-center justify-between gap-3 text-xs ${
+                  quotaBanner.state === 'shield_active'
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span className="font-medium truncate">
+                    {quotaBanner.state === 'shield_active'
+                      ? 'Quota Shield Active: non-essential background sync paused & cached backups active until daily Spark reset'
+                      : 'Conserve Mode: background crons paused to protect daily Spark quota'}
+                    {quotaBanner.nextResetIso
+                      ? ` (${new Date(quotaBanner.nextResetIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+                      : ''}
+                    .
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQuotaBanner((prev) => (prev ? { ...prev, dismissed: true } : null))}
+                  className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 shrink-0"
+                  title="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
             <TabsContent value="notifications" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <NotificationsPage />
