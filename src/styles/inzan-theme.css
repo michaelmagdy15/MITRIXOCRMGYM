@@ -198,6 +198,22 @@ html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][class*="bg-gr
 }
 html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary:hover { background: #34343a; }
 
+/* High-contrast primary CTA on authentication screens (Login & Sign Up) */
+html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][data-auth-cta="true"],
+html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][data-auth-cta="true"].bg-primary {
+  background: var(--inzan-text);
+  color: var(--inzan-bg);
+  border-color: transparent;
+}
+html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][data-auth-cta="true"]:hover,
+html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][data-auth-cta="true"].bg-primary:hover {
+  background: #ffffff;
+  color: #0d0d0f;
+}
+html.dark[data-tenant-theme="inzanathletics"] [data-slot="button"][data-auth-cta="true"]:active {
+  background: #d4d4d8;
+}
+
 /* ── Logo & splash (Dark Mode) ── */
 html.dark img[src="/inzanlogo.png"],
 html.dark img[src*="inzanlogo"],

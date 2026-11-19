@@ -13,11 +13,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UserRole } from './types';
-import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2, Globe, Smartphone, KeyRound, Mail } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2, Globe, Smartphone, KeyRound, Mail, AlertCircle } from 'lucide-react';
 import { useLanguage } from './contexts/LanguageContext';
 import SignupWizard from './SignupWizard';
 
 type View = 'login' | 'signup' | 'signup-success';
+
+const AUTH_INPUT_CLASS =
+  'h-11 sm:h-12 rounded-xl px-3.5 text-base sm:text-sm bg-background/70 dark:bg-[#131315] border-border/80 placeholder:text-muted-foreground/70 focus-visible:border-foreground/45 focus-visible:ring-2 focus-visible:ring-foreground/15 transition-colors';
+
+const AUTH_PASSWORD_TOGGLE_CLASS =
+  'absolute right-0 inset-y-0 w-11 flex items-center justify-center rounded-r-xl text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+const AUTH_TABS_LIST_BASE =
+  'grid w-full group-data-horizontal/tabs:h-auto items-stretch gap-1 rounded-xl bg-muted/70 dark:bg-[#131315] p-1.5 ring-1 ring-border/60';
+
+const AUTH_TAB_TRIGGER_CLASS =
+  'h-full min-h-[40px] w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 py-2 text-xs sm:text-[13px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground transition-all after:hidden data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-[#2b2b30] dark:data-active:text-foreground dark:data-active:border-[#4a4a52]/70';
 
 
 interface LoginProps {
@@ -507,69 +519,72 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
 
   if (isSuperAdmin) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
-        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-8 text-center flex flex-col items-center">
-            <h1 className="text-4xl font-extralight tracking-[0.2em] uppercase text-rose-500 font-logo">PLATFORM</h1>
+      <div className="min-h-[100dvh] bg-black text-white flex flex-col items-center justify-center px-4 sm:px-6 pt-[max(1.75rem,calc(var(--safe-top)+1rem))] pb-[max(2rem,calc(var(--safe-bottom)+1.5rem))] md:py-12 font-sans relative overflow-x-hidden overflow-y-auto">
+        <div className="w-full max-w-[440px] animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-5 sm:mb-6 text-center flex flex-col items-center">
+            <h1 className="text-3xl sm:text-4xl font-extralight tracking-[0.22em] uppercase text-rose-500 font-logo">PLATFORM</h1>
             <p className="text-xs font-medium text-zinc-500 uppercase tracking-[0.4em] font-logo mt-2">Super Admin Portal</p>
           </div>
 
-          <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Sign In</h1>
-            <p className="text-sm text-zinc-400">Enter your platform credentials to access the central registry.</p>
+          <div className="space-y-1.5 text-center mb-6 sm:mb-7">
+            <h2 className="text-2xl sm:text-[28px] font-bold tracking-tight text-white">Sign In</h2>
+            <p className="text-xs sm:text-sm text-zinc-400">Enter your platform credentials to access the central registry.</p>
           </div>
 
-          <Card className="border-zinc-800 bg-zinc-950/80 shadow-2xl">
-            <CardContent className="pt-6">
+          <Card className="border-0 ring-1 ring-zinc-800 bg-zinc-950/90 shadow-2xl rounded-2xl py-0">
+            <CardContent className="p-5 sm:p-7">
               {authError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription className="break-words font-mono text-xs">
+                <Alert variant="destructive" className="mb-5 rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <AlertDescription className="break-words font-mono text-xs sm:text-sm leading-relaxed text-destructive">
                     {authError}
                   </AlertDescription>
                 </Alert>
               )}
               {error && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{error}</AlertDescription>
+                <Alert variant="destructive" className="mb-5 rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <AlertDescription className="text-xs sm:text-sm leading-relaxed text-destructive">{error}</AlertDescription>
                 </Alert>
               )}
 
               <form onSubmit={handleEmailLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="admin-email" className="text-zinc-300">Email Address</Label>
-                  <Input 
+                <div className="space-y-1.5">
+                  <Label htmlFor="admin-email" className="text-xs sm:text-[13px] font-medium text-zinc-300">Email Address</Label>
+                  <Input
                     id="admin-email"
-                    type="email" 
-                    placeholder="you@mitrixo.com" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    className="bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500 focus-visible:ring-rose-500"
-                    required 
+                    type="email"
+                    placeholder="you@mitrixo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11 sm:h-12 rounded-xl px-3.5 text-base sm:text-sm bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500 focus-visible:ring-rose-500"
+                    required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <Label htmlFor="admin-password" className="text-zinc-300">Password</Label>
+                    <Label htmlFor="admin-password" className="text-xs sm:text-[13px] font-medium text-zinc-300">Password</Label>
                   </div>
                   <div className="relative">
-                    <Input 
+                    <Input
                       id="admin-password"
-                      type={showPassword ? 'text' : 'password'} 
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)} 
-                      className="bg-zinc-900 border-zinc-800 text-white pr-10 focus-visible:ring-rose-500"
-                      required 
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-11 sm:h-12 rounded-xl px-3.5 pr-12 text-base sm:text-sm bg-zinc-900 border-zinc-800 text-white focus-visible:ring-rose-500"
+                      required
                     />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowPassword(!showPassword)} 
-                      className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300"
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-0 inset-y-0 w-11 flex items-center justify-center rounded-r-xl text-zinc-500 hover:text-zinc-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
-                <Button type="submit" disabled={isLoading} className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold h-11 rounded-xl">
+                <Button type="submit" disabled={isLoading} className="w-full h-11 sm:h-12 mt-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl shadow-sm transition-all">
                   {isLoading ? 'Signing In...' : 'Access Portal'}
                 </Button>
               </form>
@@ -581,14 +596,11 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   }
 
   const Logo = () => (
-    <div className="mb-8 text-center flex flex-col items-center">
+    <div className="mb-5 sm:mb-6 text-center flex flex-col items-center">
       {branding.logoUrl ? (
-        <img src={branding.logoUrl} alt={branding.companyName} className="h-20 w-auto object-contain mb-4 dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
+        <img src={branding.logoUrl} alt={branding.companyName} className="h-11 sm:h-14 max-w-[230px] sm:max-w-[270px] w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
       ) : (
-        <>
-          <h1 className="text-5xl font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
-
-        </>
+        <h1 className="text-3xl sm:text-4xl font-extralight tracking-[0.22em] uppercase text-primary font-logo">{branding.companyName}</h1>
       )}
     </div>
   );
@@ -596,26 +608,28 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   // ── Sign-up success view ──
   if (view === 'signup-success') {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-        <Logo />
-        <Card className="w-full max-w-md shadow-2xl text-center">
-          <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
-            <CheckCircle2 className="h-16 w-16 text-green-500" />
-            <h2 className="text-xl font-bold">Request Submitted!</h2>
-            <p className="text-muted-foreground text-sm">Your sign-up request has been sent to the administrators. You'll be notified once your account is approved.</p>
-            <Button variant="outline" onClick={() => setView('login')}>Back to Login</Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center px-4 sm:px-6 pt-[max(1.75rem,calc(var(--safe-top)+1rem))] pb-[max(2rem,calc(var(--safe-bottom)+1.5rem))] md:py-12 overflow-x-hidden overflow-y-auto">
+        <div className="w-full max-w-[440px]">
+          <Logo />
+          <Card className="w-full bg-card/95 border-0 ring-1 ring-border/80 shadow-2xl shadow-black/10 dark:shadow-black/50 rounded-2xl text-center py-0">
+            <CardContent className="p-6 sm:p-8 flex flex-col items-center gap-4">
+              <CheckCircle2 className="h-16 w-16 text-green-500" />
+              <h2 className="text-xl font-bold">Request Submitted!</h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">Your sign-up request has been sent to the administrators. You'll be notified once your account is approved.</p>
+              <Button data-auth-cta="true" className="w-full h-11 rounded-xl font-semibold mt-1" onClick={() => setView('login')}>Back to Login</Button>
+            </CardContent>
+          </Card>
 
-        {onSwitchToMemberStore && (
-          <Button 
-            variant="outline" 
-            onClick={onSwitchToMemberStore} 
-            className="mt-4 w-full max-w-md bg-background/50 border-white/10 hover:bg-muted text-xs font-bold h-10 rounded-xl"
-          >
-            ← Go to Member Storefront
-          </Button>
-        )}
+          {onSwitchToMemberStore && (
+            <Button
+              variant="outline"
+              onClick={onSwitchToMemberStore}
+              className="mt-4 w-full bg-background/50 border-border/80 hover:bg-muted text-xs font-bold h-11 rounded-xl"
+            >
+              ← Go to Member Storefront
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -627,203 +641,230 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
 
   // ── Main login view ──
   return (
-    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center px-6 pt-[max(1.5rem,calc(var(--safe-top)+0.75rem))] pb-[max(1.5rem,calc(var(--safe-bottom)+0.75rem))] md:p-12 font-sans relative overflow-y-auto">
+    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center px-4 sm:px-6 pt-[max(1.75rem,calc(var(--safe-top)+1rem))] pb-[max(2rem,calc(var(--safe-bottom)+1.5rem))] md:py-12 font-sans relative overflow-x-hidden overflow-y-auto">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.045),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.045),transparent_55%)]" />
 
-      <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="relative z-10 w-full max-w-[440px] animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Logo */}
         <Logo />
 
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
-          <p className="text-sm text-muted-foreground">Select your portal role to sign in to your workspace.</p>
+        <div className="space-y-1.5 text-center mb-6 sm:mb-7">
+          <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight text-foreground">Welcome Back</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Select your portal role to sign in to your workspace.</p>
         </div>
 
-          <Card className="border-border/50 shadow-2xl glass-card">
-            <CardContent className="pt-6">
-              {authError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription className="break-words font-mono text-xs">
-                    {authError}
-                  </AlertDescription>
-                </Alert>
-              )}
-              {error && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+        <Card className="bg-card/95 border-0 ring-1 ring-border/80 shadow-2xl shadow-black/10 dark:shadow-black/50 rounded-2xl py-0">
+          <CardContent className="p-5 sm:p-7">
+            {authError && (
+              <Alert variant="destructive" className="mb-5 rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <AlertDescription className="break-words font-mono text-xs sm:text-sm leading-relaxed text-destructive">
+                  {authError}
+                </AlertDescription>
+              </Alert>
+            )}
+            {error && (
+              <Alert variant="destructive" className="mb-5 rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <AlertDescription className="text-xs sm:text-sm leading-relaxed text-destructive">{error}</AlertDescription>
+              </Alert>
+            )}
 
-              <Tabs defaultValue="member" onValueChange={() => { setError(''); setAuthError(null); }}>
-                <TabsList className={`grid ${isStrike ? 'grid-cols-2' : 'grid-cols-3'} w-full mb-6 bg-muted/50 p-1 rounded-lg`}>
-                  <TabsTrigger value="member" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                    <Users className="h-3.5 w-3.5" /> Member
+            <Tabs defaultValue="member" onValueChange={() => { setError(''); setAuthError(null); }}>
+              <TabsList className={`${AUTH_TABS_LIST_BASE} ${isStrike ? 'grid-cols-2' : 'grid-cols-3'} mb-6`}>
+                <TabsTrigger value="member" className={AUTH_TAB_TRIGGER_CLASS}>
+                  <Users className="h-3.5 w-3.5 shrink-0" /> Member
+                </TabsTrigger>
+                {!isStrike && (
+                  <TabsTrigger value="coach" className={AUTH_TAB_TRIGGER_CLASS}>
+                    <Dumbbell className="h-3.5 w-3.5 shrink-0" /> Coach / FM
                   </TabsTrigger>
-                  {!isStrike && (
-                    <TabsTrigger value="coach" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                      <Dumbbell className="h-3.5 w-3.5" /> Coach / FM
-                    </TabsTrigger>
-                  )}
-                  <TabsTrigger value="staff" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Staff
-                  </TabsTrigger>
-                </TabsList>
+                )}
+                <TabsTrigger value="staff" className={AUTH_TAB_TRIGGER_CLASS}>
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Staff
+                </TabsTrigger>
+              </TabsList>
 
-                {/* ── Member Tab ── */}
-                <TabsContent value="member" className="space-y-4">
-                  <form onSubmit={handleMemberLogin} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="member-id">Member ID or Phone Number</Label>
+              {/* ── Member Tab ── */}
+              <TabsContent value="member" className="m-0">
+                <form onSubmit={handleMemberLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="member-id" className="text-xs sm:text-[13px] font-medium text-foreground/90">Member ID or Phone Number</Label>
+                    <Input
+                      id="member-id"
+                      placeholder={isStrike ? 'e.g. 01000680580 or MEM-001' : 'e.g. P20 or 01000680580'}
+                      value={memberId}
+                      onChange={e => setMemberId(e.target.value)}
+                      className={AUTH_INPUT_CLASS}
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="member-password" className="text-xs sm:text-[13px] font-medium text-foreground/90">Password</Label>
+                    <div className="relative">
                       <Input
-                        id="member-id"
-                        placeholder="e.g. 01000680580 or MEM-001"
-                        value={memberId}
-                        onChange={e => setMemberId(e.target.value)}
-                        className="font-mono tracking-wide"
+                        id="member-password"
+                        type={showMemberPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={memberPassword}
+                        onChange={e => setMemberPassword(e.target.value)}
+                        className={`${AUTH_INPUT_CLASS} pr-12`}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowMemberPassword(p => !p)}
+                        aria-label={showMemberPassword ? 'Hide password' : 'Show password'}
+                        className={AUTH_PASSWORD_TOGGLE_CLASS}
+                      >
+                        {showMemberPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <Button
+                    type="submit"
+                    data-auth-cta={!isStrike ? 'true' : undefined}
+                    className={
+                      isStrike
+                        ? 'w-full h-11 sm:h-12 rounded-xl text-sm font-semibold mt-1 bg-gradient-to-r from-primary to-rose-600 hover:from-primary/95 hover:to-rose-600/95 text-white shadow-sm transition-all'
+                        : 'w-full h-11 sm:h-12 rounded-xl text-sm font-semibold mt-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all'
+                    }
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Signing in...' : 'Sign In as Member'}
+                  </Button>
+                </form>
+                <div className="mt-5 pt-3 border-t border-border/50 flex items-center justify-between gap-2 text-xs sm:text-[13px]">
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setForgotOpen(true);
+                      setPhoneResetStep('phone');
+                      setPhoneSmsError(null);
+                      setError('');
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                  <button type="button" className="text-foreground hover:opacity-80 font-semibold underline-offset-4 hover:underline" onClick={() => { setView('signup'); setError(''); }}>
+                    Sign Up
+                  </button>
+                </div>
+              </TabsContent>
+
+              {/* ── Coach Tab ── */}
+              {!isStrike && (
+                <TabsContent value="coach" className="m-0">
+                  <form onSubmit={handleCoachLogin} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="coach-id" className="text-xs sm:text-[13px] font-medium text-foreground/90">Coach / Fitness Manager ID or Email</Label>
+                      <Input
+                        id="coach-id"
+                        placeholder="e.g. COACH-001 or coach@inzanathletics.com"
+                        value={coachId}
+                        onChange={e => setCoachId(e.target.value)}
+                        className={AUTH_INPUT_CLASS}
                         autoComplete="username"
                         required
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="member-password">Password</Label>
+                      <Label htmlFor="coach-password" className="text-xs sm:text-[13px] font-medium text-foreground/90">Password</Label>
                       <div className="relative">
                         <Input
-                          id="member-password"
-                          type={showMemberPassword ? 'text' : 'password'}
+                          id="coach-password"
+                          type={showCoachPassword ? 'text' : 'password'}
                           placeholder="••••••••"
-                          value={memberPassword}
-                          onChange={e => setMemberPassword(e.target.value)}
-                          className="pr-10"
+                          value={coachPassword}
+                          onChange={e => setCoachPassword(e.target.value)}
+                          className={`${AUTH_INPUT_CLASS} pr-12`}
                           autoComplete="current-password"
                           required
                         />
-                        <button type="button" onClick={() => setShowMemberPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showMemberPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        <button
+                          type="button"
+                          onClick={() => setShowCoachPassword(p => !p)}
+                          aria-label={showCoachPassword ? 'Hide password' : 'Show password'}
+                          className={AUTH_PASSWORD_TOGGLE_CLASS}
+                        >
+                          {showCoachPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full h-11 text-sm font-semibold bg-gradient-to-r from-primary to-rose-600 hover:from-primary/95 hover:to-rose-600/95 transition-all duration-300" disabled={isLoading}>
-                      {isLoading ? 'Signing in...' : 'Sign In as Member'}
+                    <Button type="submit" data-auth-cta="true" className="w-full h-11 sm:h-12 rounded-xl text-sm font-semibold mt-1 shadow-sm transition-all" disabled={isLoading}>
+                      {isLoading ? 'Signing in...' : 'Sign In as Coach / Fitness Manager'}
                     </Button>
                   </form>
-                  <div className="flex items-center justify-between text-xs pt-2">
-                    <button
-                      className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                      onClick={() => {
-                        setForgotOpen(true);
-                        setPhoneResetStep('phone');
-                        setPhoneSmsError(null);
-                        setError('');
-                      }}
-                    >
+                  <div className="mt-5 pt-3 border-t border-border/50 flex items-center justify-center text-xs sm:text-[13px]">
+                    <button type="button" className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
                       Forgot password?
-                    </button>
-                    <button className="text-primary hover:text-primary/80 font-semibold underline-offset-4 hover:underline" onClick={() => { setView('signup'); setError(''); }}>
-                      Sign Up
                     </button>
                   </div>
                 </TabsContent>
+              )}
 
-                {/* ── Coach Tab ── */}
-                {!isStrike && (
-                  <TabsContent value="coach" className="space-y-4">
-                    <form onSubmit={handleCoachLogin} className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="coach-id">Coach / Fitness Manager ID or Email</Label>
-                        <Input
-                          id="coach-id"
-                          placeholder="e.g. COACH-001 or testcoach@inzan.local"
-                          value={coachId}
-                          onChange={e => setCoachId(e.target.value)}
-                          className="tracking-wide"
-                          autoComplete="username"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="coach-password">Password</Label>
-                        <div className="relative">
-                          <Input
-                            id="coach-password"
-                            type={showCoachPassword ? 'text' : 'password'}
-                            placeholder="••••••••"
-                            value={coachPassword}
-                            onChange={e => setCoachPassword(e.target.value)}
-                            className="pr-10"
-                            autoComplete="current-password"
-                            required
-                          />
-                          <button type="button" onClick={() => setShowCoachPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                            {showCoachPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                      </div>
-                      <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={isLoading}>
-                        {isLoading ? 'Signing in...' : 'Sign In as Coach / Fitness Manager'}
-                      </Button>
-                    </form>
-                    <div className="text-center text-xs pt-2">
-                      <button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
-                        Forgot password?
+              {/* ── Staff Tab ── */}
+              <TabsContent value="staff" className="m-0">
+                <form onSubmit={handleEmailLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="staff-email" className="text-xs sm:text-[13px] font-medium text-foreground/90">Email</Label>
+                    <Input id="staff-email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} className={AUTH_INPUT_CLASS} autoComplete="username" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="staff-password" className="text-xs sm:text-[13px] font-medium text-foreground/90">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="staff-password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        className={`${AUTH_INPUT_CLASS} pr-12`}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(p => !p)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className={AUTH_PASSWORD_TOGGLE_CLASS}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                  </TabsContent>
-                )}
-
-                {/* ── Staff Tab ── */}
-                <TabsContent value="staff" className="space-y-4">
-
-                  <form onSubmit={handleEmailLogin} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="staff-email">Email</Label>
-                      <Input id="staff-email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" required />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="staff-password">Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="staff-password"
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={password}
-                          onChange={e => setPassword(e.target.value)}
-                          className="pr-10"
-                          autoComplete="current-password"
-                          required
-                        />
-                        <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={isLoading}>
-                      {isLoading ? 'Signing in...' : 'Sign In'}
-                    </Button>
-                  </form>
-
-                  <div className="text-center text-xs pt-2">
-                    <button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
-                      Forgot password?
-                    </button>
                   </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+                  <Button type="submit" data-auth-cta={!isStrike ? 'true' : undefined} className="w-full h-11 sm:h-12 rounded-xl text-sm font-semibold mt-1 shadow-sm transition-all" disabled={isLoading}>
+                    {isLoading ? 'Signing in...' : 'Sign In'}
+                  </Button>
+                </form>
 
-          {onSwitchToMemberStore && (
-            <Button 
-              variant="outline" 
-              onClick={onSwitchToMemberStore} 
-              className="mt-4 w-full bg-background/50 border-white/10 hover:bg-muted text-xs font-bold h-11 rounded-xl"
-            >
-              ← Go to Member Storefront
-            </Button>
-          )}
+                <div className="mt-5 pt-3 border-t border-border/50 flex items-center justify-center text-xs sm:text-[13px]">
+                  <button type="button" className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
+                    Forgot password?
+                  </button>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
-          <div className="text-center text-xs text-muted-foreground/60">
-            Made & managed by mitrixo.com systems
-          </div>
+        {onSwitchToMemberStore && (
+          <Button
+            variant="outline"
+            onClick={onSwitchToMemberStore}
+            className="mt-4 w-full bg-background/50 border-border/80 hover:bg-muted text-xs font-bold h-11 rounded-xl"
+          >
+            ← Go to Member Storefront
+          </Button>
+        )}
+
+        <div className="mt-6 text-center text-xs text-muted-foreground/70">
+          Made & managed by mitrixo.com systems
         </div>
+      </div>
 
       {/* ── Unified Forgot Password Dialog (SMS Phone OTP & Email Link for All Roles) ── */}
       <Dialog open={forgotOpen} onOpenChange={open => { 
@@ -850,12 +891,12 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
           </DialogHeader>
 
           <Tabs defaultValue="sms" className="w-full mt-2">
-            <TabsList className="grid grid-cols-2 w-full mb-4 bg-muted/60 p-1 rounded-lg">
-              <TabsTrigger value="sms" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                <Smartphone className="h-3.5 w-3.5" /> Phone SMS Code
+            <TabsList className={`${AUTH_TABS_LIST_BASE} grid-cols-2 mb-5`}>
+              <TabsTrigger value="sms" className={AUTH_TAB_TRIGGER_CLASS}>
+                <Smartphone className="h-3.5 w-3.5 shrink-0" /> Phone SMS Code
               </TabsTrigger>
-              <TabsTrigger value="email" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                <Mail className="h-3.5 w-3.5" /> Email Reset Link
+              <TabsTrigger value="email" className={AUTH_TAB_TRIGGER_CLASS}>
+                <Mail className="h-3.5 w-3.5 shrink-0" /> Email Reset Link
               </TabsTrigger>
             </TabsList>
 
@@ -868,12 +909,17 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                     <p className="font-bold text-lg">Password Reset Complete!</p>
                     <p className="text-sm text-muted-foreground">You can now sign in immediately with your new password.</p>
                   </div>
-                  <Button className="w-full mt-2" onClick={() => setForgotOpen(false)}>Sign In Now</Button>
+                  <Button data-auth-cta="true" className="w-full h-11 rounded-xl font-semibold mt-2" onClick={() => setForgotOpen(false)}>Sign In Now</Button>
                 </div>
               ) : phoneResetStep === 'otp' ? (
                 <form onSubmit={handleVerifyPhoneOtpAndReset} className="space-y-4 py-1">
                   <input type="text" name="username" value={phoneResetNumber} autoComplete="username" className="hidden" readOnly tabIndex={-1} aria-hidden="true" />
-                  {phoneSmsError && <Alert variant="destructive"><AlertDescription>{phoneSmsError}</AlertDescription></Alert>}
+                  {phoneSmsError && (
+                    <Alert variant="destructive" className="rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <AlertDescription className="text-xs sm:text-sm leading-relaxed text-destructive">{phoneSmsError}</AlertDescription>
+                    </Alert>
+                  )}
                   
                   <div className="space-y-2">
                     <Label htmlFor="otp-input">6-Digit SMS Verification Code</Label>
@@ -882,7 +928,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="e.g. 123456"
                       value={phoneOtpCode}
                       onChange={e => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="text-center font-mono text-xl tracking-[0.3em] font-bold"
+                      className="h-12 rounded-xl text-center font-mono text-xl tracking-[0.3em] font-bold"
                       maxLength={6}
                       required
                       autoFocus
@@ -898,6 +944,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="Min 6 characters"
                       value={phoneNewPassword}
                       onChange={e => setPhoneNewPassword(e.target.value)}
+                      className="h-11 rounded-xl px-3.5 text-base sm:text-sm"
                       autoComplete="new-password"
                       required
                     />
@@ -911,21 +958,27 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="Re-enter new password"
                       value={phoneConfirmPassword}
                       onChange={e => setPhoneConfirmPassword(e.target.value)}
+                      className="h-11 rounded-xl px-3.5 text-base sm:text-sm"
                       autoComplete="new-password"
                       required
                     />
                   </div>
 
                   <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setPhoneResetStep('phone')}>Back</Button>
-                    <Button type="submit" disabled={phoneSmsLoading || phoneOtpCode.length < 6 || !phoneNewPassword || !phoneConfirmPassword}>
+                    <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={() => setPhoneResetStep('phone')}>Back</Button>
+                    <Button type="submit" data-auth-cta="true" className="h-11 rounded-xl font-semibold" disabled={phoneSmsLoading || phoneOtpCode.length < 6 || !phoneNewPassword || !phoneConfirmPassword}>
                       {phoneSmsLoading ? 'Verifying...' : 'Set New Password'}
                     </Button>
                   </DialogFooter>
                 </form>
               ) : (
                 <form onSubmit={handleSendPhoneSms} className="space-y-4 py-1">
-                  {phoneSmsError && <Alert variant="destructive"><AlertDescription>{phoneSmsError}</AlertDescription></Alert>}
+                  {phoneSmsError && (
+                    <Alert variant="destructive" className="rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <AlertDescription className="text-xs sm:text-sm leading-relaxed text-destructive">{phoneSmsError}</AlertDescription>
+                    </Alert>
+                  )}
                   
                   <div className="space-y-2">
                     <Label htmlFor="phone-input">Mobile Phone Number</Label>
@@ -935,7 +988,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="+201000680580"
                       value={phoneResetNumber}
                       onChange={e => setPhoneResetNumber(e.target.value)}
-                      className="font-mono tracking-wide"
+                      className="h-11 rounded-xl px-3.5 text-base sm:text-sm font-mono tracking-wide"
                       required
                       autoFocus
                     />
@@ -946,8 +999,8 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   <div id="phone-recaptcha-container"></div>
 
                   <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
-                    <Button type="submit" disabled={phoneSmsLoading || !phoneResetNumber.trim()}>
+                    <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={() => setForgotOpen(false)}>Cancel</Button>
+                    <Button type="submit" data-auth-cta="true" className="h-11 rounded-xl font-semibold" disabled={phoneSmsLoading || !phoneResetNumber.trim()}>
                       {phoneSmsLoading ? 'Sending SMS...' : 'Send SMS Code'}
                     </Button>
                   </DialogFooter>
@@ -964,19 +1017,24 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                     <p className="font-semibold text-lg">Reset Link Sent!</p>
                     <p className="text-sm text-muted-foreground">If an account exists for <strong>{forgotEmail}</strong>, you will receive a password reset email shortly.</p>
                   </div>
-                  <Button className="w-full mt-2" onClick={() => setForgotOpen(false)}>Close</Button>
+                  <Button data-auth-cta="true" className="w-full h-11 rounded-xl font-semibold mt-2" onClick={() => setForgotOpen(false)}>Close</Button>
                 </div>
               ) : (
                 <form onSubmit={handleForgotPassword} className="space-y-4 py-1">
-                  {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+                  {error && (
+                    <Alert variant="destructive" className="rounded-xl border-destructive/35 bg-destructive/10 px-3.5 py-3 text-destructive flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <AlertDescription className="text-xs sm:text-sm leading-relaxed text-destructive">{error}</AlertDescription>
+                    </Alert>
+                  )}
                   <div className="space-y-2">
                     <Label>Email Address</Label>
-                    <Input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required />
+                    <Input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="h-11 rounded-xl px-3.5 text-base sm:text-sm" required />
                   </div>
                   <p className="text-xs text-muted-foreground">We'll send a password reset link directly to your email inbox.</p>
                   <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
-                    <Button type="submit" disabled={isLoading || !forgotEmail}>
+                    <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={() => setForgotOpen(false)}>Cancel</Button>
+                    <Button type="submit" data-auth-cta="true" className="h-11 rounded-xl font-semibold" disabled={isLoading || !forgotEmail}>
                       {isLoading ? 'Sending...' : 'Send Reset Link'}
                     </Button>
                   </DialogFooter>
