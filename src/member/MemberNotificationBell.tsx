@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '../firebase';
 import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -65,12 +66,14 @@ interface MemberNotificationBellProps {
 export default function MemberNotificationBell({ clientId, onNavigate }: MemberNotificationBellProps) {
   const { currentUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const [clientNotifications, setClientNotifications] = useState<MemberNotification[]>([]);
   const [topLevelNotifications, setTopLevelNotifications] = useState<MemberNotification[]>([]);
   const [announcementNotifications, setAnnouncementNotifications] = useState<MemberNotification[]>([]);
   const [autoStatusNotifications, setAutoStatusNotifications] = useState<MemberNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const hasSeenInitialClientSnap = useRef(false);
   const hasSeenInitialTopSnap = useRef(false);
   const hasSeenInitialAnnSnap = useRef(false);
@@ -272,15 +275,86 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
     return () => unsubscribe();
   }, []);
 
+  const updatePanelPosition = useCallback(() => {
+    const triggerEl = dropdownRef.current;
+    if (!triggerEl || typeof window === 'undefined') return;
+    const rect = triggerEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const top = Math.max(Math.round(rect.bottom + 8), 56);
+    const maxHeight = Math.max(220, vh - top - 16);
+
+    if (vw < 768) {
+      setPanelStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: '12px',
+        right: '12px',
+        width: 'auto',
+        maxHeight: `${maxHeight}px`,
+      });
+      return;
+    }
+
+    const panelWidth = Math.min(360, vw - 24);
+    const rightOffset = Math.max(12, Math.round(vw - rect.right));
+    const wouldOverflowLeft = vw - rightOffset - panelWidth < 12;
+
+    setPanelStyle(
+      wouldOverflowLeft
+        ? {
+            position: 'fixed',
+            top: `${top}px`,
+            left: `${Math.max(12, Math.round(rect.left))}px`,
+            width: `${panelWidth}px`,
+            maxHeight: `${maxHeight}px`,
+          }
+        : {
+            position: 'fixed',
+            top: `${top}px`,
+            right: `${rightOffset}px`,
+            width: `${panelWidth}px`,
+            maxHeight: `${maxHeight}px`,
+          }
+    );
+  }, []);
+
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen) return;
+    updatePanelPosition();
+
+    const handleResize = () => updatePanelPosition();
+    const handleScroll = (event: Event) => {
+      if (panelRef.current && event.target instanceof Node && panelRef.current.contains(event.target)) {
+        return;
+      }
+      updatePanelPosition();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         setIsOpen(false);
       }
     };
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const insideTrigger = Boolean(dropdownRef.current?.contains(target));
+      const insidePanel = Boolean(panelRef.current?.contains(target));
+      if (!insideTrigger && !insidePanel) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, updatePanelPosition]);
 
   useEffect(() => {
     if (!clientId) {
@@ -477,8 +551,10 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
         variant="ghost"
         size="icon"
         className="h-8 w-8 relative text-foreground"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(prev => !prev)}
         title="Notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
@@ -488,66 +564,88 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
         )}
       </Button>
 
-      {isOpen && (
-        <div className="fixed top-[calc(4rem+var(--safe-top))] left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:w-80 md:mt-2 rounded-xl border bg-card shadow-2xl z-[60] overflow-hidden animate-in fade-in-0 zoom-in-95">
-          <div className="flex items-center justify-between p-4 border-b bg-muted/30">
-            <h3 className="font-bold text-sm">Notifications</h3>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllRead}
-                  className="text-[10px] font-semibold text-primary hover:text-primary/80 flex items-center gap-1"
-                >
-                  <Check className="h-3 w-3" /> Mark all read
-                </button>
-              )}
-              <button onClick={() => setIsOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="max-h-[400px] overflow-y-auto no-scrollbar">
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <Bell className="h-8 w-8 opacity-20 mx-auto mb-2" />
-                <p className="text-sm">No notifications yet</p>
-                <p className="text-xs mt-1">We'll notify you about important updates</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {notifications.map(n => (
-                  <div
-                    key={`${n.source}-${n.id}`}
-                    className={`flex gap-3 p-3 transition-colors cursor-pointer ${
-                      n.read ? 'opacity-60' : 'bg-primary/5 hover:bg-primary/10'
-                    }`}
-                    onClick={() => handleNotificationClick(n)}
+      {isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[90] bg-black/45 backdrop-blur-[2px] md:bg-transparent md:backdrop-blur-none"
+              onClick={() => setIsOpen(false)}
+              aria-hidden="true"
+            />
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label="Notifications"
+              style={panelStyle}
+              className="z-[100] flex flex-col rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+            >
+              <div className="shrink-0 flex items-center justify-between p-4 border-b border-border bg-muted/40">
+                <h3 className="font-bold text-sm">Notifications</h3>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={markAllRead}
+                      className="text-[10px] font-semibold text-primary hover:text-primary/80 flex items-center gap-1"
+                    >
+                      <Check className="h-3 w-3" /> Mark all read
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Close notifications"
+                    onClick={() => setIsOpen(false)}
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    <div className="mt-0.5 rounded-full bg-background p-1.5 shadow-sm border shrink-0">
-                      {typeIcons[n.type] || typeIcons.system}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-semibold leading-tight">{n.title}</p>
-                        {!n.read && (
-                          <span className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
-                      <p className="text-[10px] text-muted-foreground/60 mt-1">{formatTime(n.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+
+              <div className="min-h-0 shrink overflow-y-auto no-scrollbar md:max-h-[400px]">
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <Bell className="h-8 w-8 opacity-20 mx-auto mb-2" />
+                    <p className="text-sm">No notifications yet</p>
+                    <p className="text-xs mt-1">We'll notify you about important updates</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {notifications.map(n => (
+                      <div
+                        key={`${n.source}-${n.id}`}
+                        className={`flex gap-3 p-3 transition-colors cursor-pointer ${
+                          n.read ? 'opacity-60' : 'bg-primary/5 hover:bg-primary/10'
+                        }`}
+                        onClick={() => handleNotificationClick(n)}
+                      >
+                        <div className="mt-0.5 rounded-full bg-background p-1.5 shadow-sm border shrink-0">
+                          {typeIcons[n.type] || typeIcons.system}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold leading-tight">{n.title}</p>
+                            {!n.read && (
+                              <span className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1" />
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">{formatTime(n.createdAt)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   );
 }

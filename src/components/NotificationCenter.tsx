@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppContext } from '../context';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -1266,18 +1267,91 @@ export function NotificationCenter() {
   } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Click outside to close
+  const updatePanelPosition = useCallback(() => {
+    const triggerEl = dropdownRef.current;
+    if (!triggerEl || typeof window === 'undefined') return;
+    const rect = triggerEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const top = Math.max(Math.round(rect.bottom + 8), 56);
+    const maxHeight = Math.max(220, vh - top - 16);
+
+    if (vw < 768) {
+      setPanelStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: '12px',
+        right: '12px',
+        width: 'auto',
+        maxHeight: `${maxHeight}px`,
+      });
+      return;
+    }
+
+    const panelWidth = Math.min(384, vw - 24);
+    const rightOffset = Math.max(12, Math.round(vw - rect.right));
+    const wouldOverflowLeft = vw - rightOffset - panelWidth < 12;
+
+    setPanelStyle(
+      wouldOverflowLeft
+        ? {
+            position: 'fixed',
+            top: `${top}px`,
+            left: `${Math.max(12, Math.round(rect.left))}px`,
+            width: `${panelWidth}px`,
+            maxHeight: `${maxHeight}px`,
+          }
+        : {
+            position: 'fixed',
+            top: `${top}px`,
+            right: `${rightOffset}px`,
+            width: `${panelWidth}px`,
+            maxHeight: `${maxHeight}px`,
+          }
+    );
+  }, []);
+
+  // Anchor, reposition, Escape-close, and click-outside for portalled panel
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen) return;
+    updatePanelPosition();
+
+    const handleResize = () => updatePanelPosition();
+    const handleScroll = (event: Event) => {
+      if (panelRef.current && event.target instanceof Node && panelRef.current.contains(event.target)) {
+        return;
+      }
+      updatePanelPosition();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         setIsOpen(false);
       }
     };
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const insideTrigger = Boolean(dropdownRef.current?.contains(target));
+      const insidePanel = Boolean(panelRef.current?.contains(target));
+      if (!insideTrigger && !insidePanel) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, updatePanelPosition]);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -1285,8 +1359,10 @@ export function NotificationCenter() {
         variant="ghost"
         size="icon"
         className="relative h-8 w-8 sm:h-10 sm:w-10 rounded-full"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(prev => !prev)}
         title="Notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
         <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
         {activeNotifications.length > 0 && (
@@ -1296,110 +1372,137 @@ export function NotificationCenter() {
         )}
       </Button>
 
-      {isOpen && (
-        <div className="fixed top-[calc(4rem+var(--safe-top))] left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:w-80 sm:md:w-96 md:mt-2 rounded-xl border bg-card shadow-xl z-50 overflow-hidden animate-in fade-in-0 zoom-in-95">
-          <div className="flex items-center justify-between p-4 border-b bg-muted/30">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm">Notifications</h3>
-              {activeNotifications.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                  {activeNotifications.length} active
-                </Badge>
-              )}
-            </div>
-            {activeNotifications.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
-                onClick={dismissAll}
-              >
-                Dismiss all <Check className="ml-1 h-3 w-3" />
-              </Button>
-            )}
-          </div>
-
-          <div className="max-h-[380px] overflow-y-auto no-scrollbar">
-            {activeNotifications.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center">
-                <Bell className="h-8 w-8 opacity-20 mb-2" />
-                <p>You have no active notifications.</p>
-                {dismissedNotificationsList.length > 0 && (
-                  <p className="text-xs text-muted-foreground/70 mt-1">
-                    {dismissedNotificationsList.length} saved in dismissed history
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {activeNotifications.map((notification) => {
-                  const meta = getNotificationTypeMeta(notification.type);
-                  return (
-                    <div
-                      key={notification.id}
-                      className={`flex flex-col p-3 sm:p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
-                        !notification.isRead ? 'bg-primary/[0.03]' : ''
-                      }`}
-                      onClick={() => {
-                        handleNotificationClick(notification);
-                        setIsOpen(false);
-                      }}
+      {isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[90] bg-black/45 backdrop-blur-[2px] md:bg-transparent md:backdrop-blur-none"
+              onClick={() => setIsOpen(false)}
+              aria-hidden="true"
+            />
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label="Notifications"
+              style={panelStyle}
+              className="z-[100] flex flex-col rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+            >
+              <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-muted/40">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="font-semibold text-sm">Notifications</h3>
+                  {activeNotifications.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                      {activeNotifications.length} active
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {activeNotifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={dismissAll}
                     >
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="mt-0.5 rounded-full bg-background p-1.5 shadow-sm border shrink-0">
-                            {meta.icon}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              {!notification.isRead && (
-                                <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                              )}
-                              <p className="text-sm font-medium leading-none truncate">
-                                {notification.title}
-                              </p>
+                      Dismiss all <Check className="ml-1 h-3 w-3" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                    aria-label="Close notifications"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="min-h-0 shrink overflow-y-auto no-scrollbar md:max-h-[380px]">
+                {activeNotifications.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center">
+                    <Bell className="h-8 w-8 opacity-20 mb-2" />
+                    <p>You have no active notifications.</p>
+                    {dismissedNotificationsList.length > 0 && (
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        {dismissedNotificationsList.length} saved in dismissed history
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {activeNotifications.map((notification) => {
+                      const meta = getNotificationTypeMeta(notification.type);
+                      return (
+                        <div
+                          key={notification.id}
+                          className={`flex flex-col p-3 sm:p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
+                            !notification.isRead ? 'bg-primary/[0.03]' : ''
+                          }`}
+                          onClick={() => {
+                            handleNotificationClick(notification);
+                            setIsOpen(false);
+                          }}
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="mt-0.5 rounded-full bg-background p-1.5 shadow-sm border shrink-0">
+                                {meta.icon}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  {!notification.isRead && (
+                                    <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                                  )}
+                                  <p className="text-sm font-medium leading-none truncate">
+                                    {notification.title}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {notification.description}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground/70 mt-1">
+                                  {format(notification.date, 'MMM d, yyyy')}
+                                </p>
+                              </div>
                             </div>
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {notification.description}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground/70 mt-1">
-                              {format(notification.date, 'MMM d, yyyy')}
-                            </p>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                              title="Dismiss notification (saves to history)"
+                              onClick={(e) => dismissNotification(notification.id, e)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                          title="Dismiss notification (saves to history)"
-                          onClick={(e) => dismissNotification(notification.id, e)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="p-2.5 border-t bg-muted/20 flex items-center justify-between gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs font-medium justify-center gap-1.5 h-8"
-              onClick={() => {
-                setActiveTab('notifications');
-                setIsOpen(false);
-              }}
-            >
-              <History className="h-3.5 w-3.5" />
-              View All Notifications & Dismissed History ({activeNotifications.length + dismissedNotificationsList.length})
-            </Button>
-          </div>
-        </div>
-      )}
+              <div className="shrink-0 p-2.5 border-t border-border bg-muted/20 flex items-center justify-between gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs font-medium justify-center gap-1.5 h-8"
+                  onClick={() => {
+                    setActiveTab('notifications');
+                    setIsOpen(false);
+                  }}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  View All Notifications & Dismissed History ({activeNotifications.length + dismissedNotificationsList.length})
+                </Button>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   );
 }
