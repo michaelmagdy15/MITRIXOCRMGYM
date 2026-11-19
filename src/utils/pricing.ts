@@ -210,6 +210,65 @@ export function formatCurrencyAmount(value: number, currency = 'LE'): string {
   return `${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+/**
+ * Authoritative collected revenue for a payment record.
+ * - Preserves genuine partial payments where `amount_paid < amount`.
+ * - Clamps stale `amount_paid > amount` (e.g. from historical edits before `amount_paid` sync)
+ *   to `amount` so Dashboard, Leaderboard, and Payments totals always agree.
+ */
+export function getEffectivePaymentCollected(
+  payment?: { amount?: number | null; amount_paid?: number | null } | null
+): number {
+  const amount = Number(payment?.amount) || 0;
+  if (amount <= 0) return 0;
+  if (payment?.amount_paid === undefined || payment?.amount_paid === null) return amount;
+  const paid = Number(payment.amount_paid);
+  if (!Number.isFinite(paid)) return amount;
+  return Math.min(amount, Math.max(0, paid));
+}
+
+/**
+ * Computes consistent amount-related fields when staff edits an existing payment's amount.
+ * Ensures `amount_paid`, `discountedAmount`, `remainingBalance`, and `isPartialPayment`
+ * stay synchronized with the edited `amount`.
+ */
+export function buildSyncedPaymentAmountUpdates(
+  existing: {
+    amount?: number | null;
+    amount_paid?: number | null;
+    remainingBalance?: number | null;
+    isPartialPayment?: boolean | null;
+  } | null | undefined,
+  newAmount: number
+): {
+  amount: number;
+  amount_paid: number;
+  discountedAmount: number;
+  remainingBalance: number;
+  isPartialPayment: boolean;
+} {
+  const safeNew = roundCurrency(Math.max(0, Number(newAmount) || 0));
+  const oldAmount = Number(existing?.amount) || 0;
+  const oldPaid =
+    existing?.amount_paid !== undefined && existing?.amount_paid !== null
+      ? Number(existing.amount_paid)
+      : oldAmount;
+  const wasPartial =
+    Boolean(existing?.isPartialPayment) ||
+    (Number(existing?.remainingBalance) > 0 && oldPaid < oldAmount);
+  const nextPaid =
+    wasPartial && oldPaid < safeNew ? roundCurrency(Math.max(0, oldPaid)) : safeNew;
+  const nextRemaining = roundCurrency(Math.max(0, safeNew - nextPaid));
+
+  return {
+    amount: safeNew,
+    amount_paid: nextPaid,
+    discountedAmount: safeNew,
+    remainingBalance: nextRemaining,
+    isPartialPayment: nextRemaining > 0,
+  };
+}
+
 export const DISCOUNT_REASONS: Exclude<DiscountReason, 'Standard'>[] = [
   'Promotional',
   'Referral',

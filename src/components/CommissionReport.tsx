@@ -15,6 +15,7 @@ import { downloadFile } from '../utils/download';
 import { useAuth } from '../contexts/AuthContext';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { SALES_NAME_MAPPING, SALES_MEMBERS, toCanonical } from '../constants';
+import { getEffectivePaymentCollected } from '../utils/pricing';
 
 
 const CommissionReport: React.FC = () => {
@@ -125,7 +126,7 @@ const CommissionReport: React.FC = () => {
         };
       }
 
-      const amount = Number(p.amount_paid ?? p.amount) || 0;
+      const amount = getEffectivePaymentCollected(p);
       reps[repId].totalRevenue += amount;
 
       if (p.package_category_type === 'PT' || (p.package_category_type as string) === 'Private Training' || p.packageType?.toLowerCase().includes('pt')) {

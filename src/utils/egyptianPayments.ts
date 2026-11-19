@@ -1,6 +1,7 @@
 import type { Client, Payment, PaymentMethodType } from '../types';
 import { getTenantId } from '../firebase';
 import { normalizeWhatsAppPhone } from './whatsappTemplates';
+import { getEffectivePaymentCollected } from './pricing';
 
 const getDefaultClubName = () => {
   try {
@@ -206,7 +207,7 @@ export function generateEgyptianEtaTaxCsv(
 
   for (const p of activePayments) {
     const client = clientById.get(p.clientId);
-    const grossPaid = Math.max(0, Number(p.amount_paid ?? p.amount ?? 0));
+    const grossPaid = getEffectivePaymentCollected(p);
     const netPackageTotal = Math.max(0, Number(p.discountedAmount ?? p.amount ?? grossPaid));
     const remainingDebt = Math.max(0, netPackageTotal - grossPaid);
 

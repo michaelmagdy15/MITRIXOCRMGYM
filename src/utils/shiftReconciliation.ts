@@ -1,5 +1,6 @@
 import { Payment, Branch } from '../types';
 import { safeIsoDate, getGymDateString } from './dateUtils';
+import { getEffectivePaymentCollected } from './pricing';
 
 export interface DeclaredShiftAmounts {
   cash: number;
@@ -155,7 +156,7 @@ export function calculateShiftReconciliation(
     }
 
     // 6. Valid collected money
-    const actualCollected = p.amount_paid !== undefined ? p.amount_paid : p.amount;
+    const actualCollected = getEffectivePaymentCollected(p);
     const cat = normalizeMethodCategory(p.method);
     system[cat] += Math.round(actualCollected * 100) / 100;
     system.totalCollected += Math.round(actualCollected * 100) / 100;

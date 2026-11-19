@@ -1,4 +1,5 @@
 import type { Payment } from '../types';
+import { getEffectivePaymentCollected } from './pricing';
 
 export interface ShiftReconciliationInput {
   payments: Payment[];
@@ -92,7 +93,7 @@ export function reconcileShiftDrawer({
     }
 
     transactionCount += 1;
-    const totalPaid = Math.max(0, Number(p.amount_paid ?? p.amount ?? 0));
+    const totalPaid = getEffectivePaymentCollected(p);
 
     if (p.secondaryMethod && Number(p.secondaryTenderAmount) > 0) {
       const primaryAmt = Number(p.primaryTenderAmount ?? Math.max(0, totalPaid - Number(p.secondaryTenderAmount)));

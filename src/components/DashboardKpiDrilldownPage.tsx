@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import type { Client, Payment, User } from '../types';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
+import { getEffectivePaymentCollected } from '../utils/pricing';
 import { format } from 'date-fns';
 
 export type DrilldownKpiKey =
@@ -235,7 +236,7 @@ export default function DashboardKpiDrilldownPage({
     payments.forEach((p) => {
       if (p.deleted_at || (p.status && p.status !== 'paid')) return;
       if (!p.clientId) return;
-      const amt = Number(p.amount_paid ?? p.amount ?? 0) || 0;
+      const amt = getEffectivePaymentCollected(p);
       map.set(p.clientId, (map.get(p.clientId) || 0) + amt);
     });
     return map;

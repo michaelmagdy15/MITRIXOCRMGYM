@@ -13,7 +13,8 @@ import type { Payment } from './types';
 import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
-import { safeFormatDate, toValidDate } from './utils/dateUtils';
+import { safeFormatDate, toValidDate, getGymDateString } from './utils/dateUtils';
+import { getEffectivePaymentCollected } from './utils/pricing';
 import { resolvePaymentBranch } from './utils/branchUtils';
 import { useLanguage } from './contexts/LanguageContext';
 import { toast } from 'sonner';
@@ -27,9 +28,9 @@ const safeParseISO = (dateStr: any): Date => {
 // Refunds set status 'refunded' and a deleted_at timestamp, so both are excluded.
 const isValidPayment = (p: Payment) => !p.deleted_at && (!p.status || p.status === 'paid');
 
-// Revenue must reflect money actually collected. amount_paid is authoritative
-// once a discount is applied; amount is the gross price before discount.
-const getPaymentNet = (p: Payment) => Number(p.amount_paid ?? p.amount) || 0;
+// Revenue must reflect money actually collected, bounded by the settled amount
+// so stale `amount_paid > amount` records from prior edits never overstate totals.
+const getPaymentNet = (p: Payment) => getEffectivePaymentCollected(p);
 
 const PRIVATE_PACKAGES = [
   'drop session pt', 
@@ -418,10 +419,8 @@ export default function Dashboard() {
   }, [getCanonicalName]);
 
   const isPaymentAttributedToRep = React.useCallback((payment: any, repId: string, repName: string) => {
-    // 1. Direct ID match (new payments created through the CRM)
-    if (payment.sales_rep_id && payment.sales_rep_id === repId) return true;
-
-    // 2. Canonical name match on payment fields (some legacy data)
+    // 1. Canonical explicit salesName / assigned_sales_name takes precedence when present,
+    // matching Payments filtering and preventing double credit when sales_rep_id and salesName disagree.
     const rawSalesName: string = payment.salesName || '';
     const resolvedSalesName = rawSalesName
       ? (userDisplayById.has(rawSalesName) ? (userDisplayById.get(rawSalesName) || rawSalesName) : rawSalesName)
@@ -430,24 +429,25 @@ export default function Dashboard() {
     if (salesName) {
       const canonicalSalesName = getCanonicalName(salesName);
       const canonicalRep = getCanonicalName(repName);
-      if (canonicalSalesName === canonicalRep && canonicalSalesName !== '') return true;
+      return canonicalSalesName !== '' && canonicalSalesName === canonicalRep;
+    }
+
+    // 2. Direct ID match when explicit salesName is empty
+    if (payment.sales_rep_id) {
+      return payment.sales_rep_id === repId;
     }
 
     // 3. Transitive fallback ONLY if payment has no explicit sales attribution.
-    // If it DOES have attribution but it didn't match the rep above, we must return false
-    // to prevent double counting (e.g. rep A recorded payment but rep B owns client).
-    if (!payment.sales_rep_id && !payment.salesName && !payment.assigned_sales_name) {
-      const client = clientMap.get(payment.clientId);
-      if (client) {
-        // 3a. Direct ID match on client assignedTo
-        if (client.assignedTo === repId) return true;
-        // 3b. Canonical name match on client salesName
-        const clientSalesName = (client.salesName || client.assignedTo || '').trim();
-        if (clientSalesName) {
-          const canonicalClientSales = getCanonicalName(clientSalesName);
-          const canonicalRep = getCanonicalName(repName);
-          if (canonicalClientSales === canonicalRep && canonicalClientSales !== '') return true;
-        }
+    const client = clientMap.get(payment.clientId);
+    if (client) {
+      // 3a. Direct ID match on client assignedTo
+      if (client.assignedTo === repId) return true;
+      // 3b. Canonical name match on client salesName
+      const clientSalesName = (client.salesName || client.assignedTo || '').trim();
+      if (clientSalesName) {
+        const canonicalClientSales = getCanonicalName(clientSalesName);
+        const canonicalRep = getCanonicalName(repName);
+        if (canonicalClientSales === canonicalRep && canonicalClientSales !== '') return true;
       }
     }
 
@@ -477,15 +477,9 @@ export default function Dashboard() {
   const payments = React.useMemo(() => {
     let filtered = allPayments;
     if (selectedBranch !== 'all') {
-      const branchClientIds = new Set<string>();
-      for (const c of allClients) {
-        if (c.branch === selectedBranch) {
-          branchClientIds.add(c.id);
-        }
-      }
       filtered = filtered.filter(p => {
         const pBranch = resolvePaymentBranch(p, clientMap.get(p.clientId));
-        return pBranch === selectedBranch || branchClientIds.has(p.clientId);
+        return pBranch === selectedBranch;
       });
     }
 
@@ -494,7 +488,7 @@ export default function Dashboard() {
     }
 
     return filtered;
-  }, [allPayments, allClients, selectedBranch, canViewGlobalDashboard, currentUser, isPaymentAttributedToRep, clientMap]);
+  }, [allPayments, selectedBranch, canViewGlobalDashboard, currentUser, isPaymentAttributedToRep, clientMap]);
 
   const now = new Date();
 
@@ -620,7 +614,7 @@ export default function Dashboard() {
     let relevantPayments = payments.filter(p => {
       if (!isValidPayment(p)) return false;
       if (!p.date) return false;
-      return safeFormatDate(p.date, 'yyyy-MM') === currentMonthStr;
+      return getGymDateString(p.date).slice(0, 7) === currentMonthStr;
     });
 
     if (canViewGlobalDashboard && effectiveRepId !== 'all') {
@@ -721,7 +715,7 @@ export default function Dashboard() {
   // Valid payments in the selected month, computed once and shared by every per-rep calculation
   // (previously each of ~30 reps re-scanned and re-parsed the full payment list).
   const selectedMonthPayments = React.useMemo(
-    () => payments.filter(p => isValidPayment(p) && !!p.date && safeFormatDate(p.date, 'yyyy-MM') === currentMonthStr),
+    () => payments.filter(p => isValidPayment(p) && !!p.date && getGymDateString(p.date).slice(0, 7) === currentMonthStr),
     [payments, currentMonthStr]
   );
 
@@ -741,8 +735,6 @@ export default function Dashboard() {
 
     return months.map(date => {
       const monthStr = format(date, 'yyyy-MM');
-      const start = startOfMonth(date);
-      const end = endOfMonth(date);
 
       let targetAmount = 0;
       if (currentUser?.role === 'rep') {
@@ -752,9 +744,7 @@ export default function Dashboard() {
 
       const monthPayments = payments.filter(p => {
         if (!isValidPayment(p)) return false;
-        const pDate = safeParseISO(p.date);
-        if (isNaN(pDate.getTime())) return false;
-        if (!isWithinInterval(pDate, { start, end })) return false;
+        if (!p.date || getGymDateString(p.date).slice(0, 7) !== monthStr) return false;
 
         if (currentUser?.role === 'rep') {
           return isPaymentAttributedToRep(p, currentUser.id, currentUser.name || '');
@@ -780,13 +770,10 @@ export default function Dashboard() {
   const teamRevenueData = React.useMemo(() => {
     const months = Array.from({ length: 6 }).map((_, i) => subMonths(now, 5 - i));
     return months.map(date => {
-      const start = startOfMonth(date);
-      const end = endOfMonth(date);
+      const monthStr = format(date, 'yyyy-MM');
       const mp = payments.filter(p => {
         if (!isValidPayment(p)) return false;
-        const d = safeParseISO(p.date);
-        if (isNaN(d.getTime())) return false;
-        return isWithinInterval(d, { start, end });
+        return Boolean(p.date && getGymDateString(p.date).slice(0, 7) === monthStr);
       });
       return {
         month: format(date, 'MMM yy'),
@@ -844,13 +831,10 @@ export default function Dashboard() {
   const monthlyMethodData = React.useMemo(() => {
     const months = Array.from({ length: 6 }).map((_, i) => subMonths(now, 5 - i));
     return months.map(date => {
-      const start = startOfMonth(date);
-      const end = endOfMonth(date);
+      const monthStr = format(date, 'yyyy-MM');
       const mp = payments.filter(p => {
         if (!isValidPayment(p)) return false;
-        const d = safeParseISO(p.date);
-        if (isNaN(d.getTime())) return false;
-        return isWithinInterval(d, { start, end });
+        return Boolean(p.date && getGymDateString(p.date).slice(0, 7) === monthStr);
       });
       return {
         month: format(date, 'MMM yy'),
@@ -865,13 +849,10 @@ export default function Dashboard() {
   const monthlySessionData = React.useMemo(() => {
     const months = Array.from({ length: 6 }).map((_, i) => subMonths(now, 5 - i));
     return months.map(date => {
-      const start = startOfMonth(date);
-      const end = endOfMonth(date);
+      const monthStr = format(date, 'yyyy-MM');
       const mp = payments.filter(p => {
         if (!isValidPayment(p)) return false;
-        const d = safeParseISO(p.date);
-        if (isNaN(d.getTime())) return false;
-        return isWithinInterval(d, { start, end });
+        return Boolean(p.date && getGymDateString(p.date).slice(0, 7) === monthStr);
       });
       return {
         month: format(date, 'MMM yy'),

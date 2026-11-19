@@ -39,6 +39,8 @@ import {
 import { db, getTenantId } from './firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
+import { getEffectivePaymentCollected } from './utils/pricing';
+import { resolvePaymentBranch } from './utils/branchUtils';
 import { Badge } from '@/components/ui/badge';
 import AdvancedReports, { ReportId } from './AdvancedReports';
 import {
@@ -230,6 +232,8 @@ export default function Reports() {
 
   const now = new Date();
 
+  const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+
   const payments = useMemo(() => {
     const scoped = !isInzan || revenueScope === 'all'
       ? rawPayments
@@ -237,7 +241,7 @@ export default function Reports() {
 
     return scoped.filter(p => {
       if (p.deleted_at || p.status === 'refunded') return false;
-      if (selectedBranch !== 'all' && p.branch !== selectedBranch && (p as any).clientBranch !== selectedBranch) {
+      if (selectedBranch !== 'all' && resolvePaymentBranch(p, clientMap.get(p.clientId)) !== selectedBranch) {
         return false;
       }
       if (periodFilter === 'all') return true;
@@ -249,7 +253,7 @@ export default function Reports() {
       if (periodFilter === '12m') return isAfter(d, subMonths(now, 12));
       return true;
     });
-  }, [rawPayments, isInzan, revenueScope, selectedBranch, periodFilter]);
+  }, [rawPayments, clientMap, isInzan, revenueScope, selectedBranch, periodFilter]);
 
   const filteredClients = useMemo(() => {
     if (selectedBranch === 'all') return clients;
@@ -326,7 +330,7 @@ export default function Reports() {
 
   // --- KPIs ---
   const totalFilteredRevenue = useMemo(
-    () => payments.reduce((sum, p) => sum + (Number(p.amount_paid) || Number(p.amount) || 0), 0),
+    () => payments.reduce((sum, p) => sum + getEffectivePaymentCollected(p), 0),
     [payments]
   );
 
@@ -335,12 +339,12 @@ export default function Reports() {
       rawPayments
         .filter(p => {
           if (p.deleted_at || p.status === 'refunded') return false;
-          if (selectedBranch !== 'all' && p.branch !== selectedBranch) return false;
+          if (selectedBranch !== 'all' && resolvePaymentBranch(p, clientMap.get(p.clientId)) !== selectedBranch) return false;
           const parsed = safeParseDate(p.date);
           return parsed ? isSameMonth(parsed, now) : false;
         })
-        .reduce((sum, p) => sum + (Number(p.amount_paid) || Number(p.amount) || 0), 0),
-    [rawPayments, selectedBranch]
+        .reduce((sum, p) => sum + getEffectivePaymentCollected(p), 0),
+    [rawPayments, clientMap, selectedBranch]
   );
 
   const activeCount = useMemo(
@@ -368,7 +372,7 @@ export default function Reports() {
       if (!parsed) continue;
       const sortKey = format(parsed, 'yyyy-MM');
       const month = format(parsed, 'MMM yy');
-      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const entry = map.get(sortKey) || { month, sortKey, revenue: 0, count: 0 };
       entry.revenue += amt;
       entry.count += 1;
@@ -397,7 +401,7 @@ export default function Reports() {
       } else if (pkg.includes('drop') || pkg.includes('day pass') || pkg.includes('guest')) {
         service = 'Walk-in / Day Pass';
       }
-      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const cur = map.get(service) || { name: service, value: 0, count: 0 };
       cur.value += amt;
       cur.count += 1;
@@ -411,7 +415,7 @@ export default function Reports() {
     const map = new Map<string, { name: string; value: number; count: number }>();
     for (const p of payments) {
       const m = p.method || 'Cash';
-      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const cur = map.get(m) || { name: m, value: 0, count: 0 };
       cur.value += amt;
       cur.count += 1;
@@ -426,7 +430,7 @@ export default function Reports() {
     for (const p of payments) {
       const rep = (p.salesName || (p as any).sales_rep_name || 'Unassigned').trim();
       if (!rep || rep === 'Unassigned') continue;
-      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const cur = map.get(rep) || { rep, revenue: 0, count: 0 };
       cur.revenue += amt;
       cur.count += 1;
@@ -465,7 +469,7 @@ export default function Reports() {
     const revenueByClientId = new Map<string, number>();
     for (const p of payments) {
       if (!p.clientId) continue;
-      const amt = Number(p.amount_paid) || Number(p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       revenueByClientId.set(p.clientId, (revenueByClientId.get(p.clientId) || 0) + amt);
     }
 
@@ -552,7 +556,7 @@ export default function Reports() {
     for (const p of payments) {
       if (!p.clientId) continue;
       const pDate = p.date || '';
-      const amt = Number(p.amount_paid) || Number(p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const existing = lastPaymentByClientId.get(p.clientId);
       if (!existing || pDate.localeCompare(existing.date) > 0) {
         lastPaymentByClientId.set(p.clientId, { date: pDate, amount: amt });
@@ -589,7 +593,7 @@ export default function Reports() {
     const map = new Map<string, { packageName: string; count: number; revenue: number }>();
     for (const p of payments) {
       const pkgName = (p.packageType || 'Unspecified Package').trim();
-      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const amt = getEffectivePaymentCollected(p);
       const existing = map.get(pkgName) || { packageName: pkgName, count: 0, revenue: 0 };
       existing.count += 1;
       existing.revenue += amt;

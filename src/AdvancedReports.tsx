@@ -17,6 +17,7 @@ import { Download, Star, Users, DollarSign, TrendingUp, UserPlus, Activity, Awar
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { findSimilarPhoneClusters } from './utils/phoneSimilarity';
 import { computeMemberGlobalStatus, GlobalMemberLifecycleStatus } from './utils/memberLifecycle';
+import { getEffectivePaymentCollected } from './utils/pricing';
 
 function inferPackageClassification(
   name: string,
@@ -720,7 +721,7 @@ export default function AdvancedReports({
   // 3. Income by Service Category
   // ============================================================
   const incomeByServiceData = useMemo(() => {
-    const validPayments = (payments || []).filter(p => !p.deleted_at);
+    const validPayments = (payments || []).filter(p => !p.deleted_at && p.status !== 'refunded');
     const filtered = validPayments.filter(p => {
       if (!isInDateRange(p.date || p.created_at)) return false;
       if (!matchBranch(p.branch)) return false;
@@ -729,7 +730,7 @@ export default function AdvancedReports({
     const map: Record<string, number> = {};
     filtered.forEach(p => {
       const cat = p.package_category_type || 'Other';
-      map[cat] = (map[cat] || 0) + (Number(p.amount_paid) || Number(p.amount) || 0);
+      map[cat] = (map[cat] || 0) + getEffectivePaymentCollected(p);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [payments, dateFrom, dateTo, branchFilter]);
@@ -865,7 +866,7 @@ export default function AdvancedReports({
       const key = `${src}|||${pkg}`;
       if (!map[key]) map[key] = { count: 0, revenue: 0 };
       map[key].count++;
-      map[key].revenue += Number(p.amount_paid) || Number(p.amount) || 0;
+      map[key].revenue += getEffectivePaymentCollected(p);
     });
     return Object.entries(map)
       .sort(([, a], [, b]) => b.revenue - a.revenue)
@@ -2413,7 +2414,7 @@ export default function AdvancedReports({
         <ExportMenu data={
           packageUpgradesData.map(p => ({
             Client: p.client_name, PreviousPackage: p.previousPackageName, NewPackage: p.packageType,
-            Amount: p.amount_paid || p.amount, Date: formatDate(p.date || p.created_at), SalesRep: p.salesName,
+            Amount: getEffectivePaymentCollected(p), Date: formatDate(p.date || p.created_at), SalesRep: p.salesName,
           }))} filename="package_upgrades"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {packageUpgradesData.length === 0 ? <EmptyState message="No package upgrades found." /> : (
@@ -2425,7 +2426,7 @@ export default function AdvancedReports({
                 <Td className="font-medium">{p.client_name || '—'}</Td>
                 <Td><Badge variant="outline" className="text-xs text-red-400">{p.previousPackageName || '—'}</Badge></Td>
                 <Td><Badge variant="outline" className="text-xs text-emerald-400">{p.packageType || '—'}</Badge></Td>
-                <Td>{formatCurrency(Number(p.amount_paid) || Number(p.amount) || 0)}</Td>
+                <Td>{formatCurrency(getEffectivePaymentCollected(p))}</Td>
                 <Td>{formatDate(p.date || p.created_at)}</Td>
                 <Td>{p.salesName || '—'}</Td>
               </tr>

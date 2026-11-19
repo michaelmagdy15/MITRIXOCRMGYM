@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { resolvePaymentCategory } from '../utils/paymentCategories';
 import { isPaymentEditableByStaff } from '../utils/permissions';
 import { isTenantInzan } from '../utils/inzanOrg';
+import { buildSyncedPaymentAmountUpdates } from '../utils/pricing';
 
 interface UsePaymentsOptions {
   currentUser: User | null;
@@ -172,7 +173,12 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
 
-      await updateDoc(doc(db, 'payments', id), cleanData(updates));
+      const syncedUpdates: Partial<Payment> =
+        updates.amount !== undefined && updates.amount_paid === undefined && payment
+          ? { ...updates, ...buildSyncedPaymentAmountUpdates(payment, updates.amount) }
+          : updates;
+
+      await updateDoc(doc(db, 'payments', id), cleanData(syncedUpdates));
       await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `payments/${id}`);

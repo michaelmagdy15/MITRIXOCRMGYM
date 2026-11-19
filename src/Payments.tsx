@@ -11,10 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, addDays } from 'date-fns';
-import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/dateUtils';
+import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate, getGymDateString } from './utils/dateUtils';
 import { Payment, Client, RefundDetails } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
-import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
+import { calculatePricing, formatCurrencyAmount, getEffectivePaymentCollected, buildSyncedPaymentAmountUpdates } from './utils/pricing';
 import { QUICK_DISCOUNT_REASONS } from './components/PricingDiscountControls';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
@@ -1121,7 +1121,7 @@ export default function Payments() {
               </tr>` : ''}
               <tr class="total-row">
                 <td class="text-end">${labelTotalPaid}</td>
-                <td class="text-end">${(payment.amount_paid ?? payment.amount).toLocaleString()} LE</td>
+                <td class="text-end">${getEffectivePaymentCollected(payment).toLocaleString()} LE</td>
               </tr>
               ${(payment.remainingBalance && payment.remainingBalance > 0) ? `
               <tr style="color: #dc2626; font-size: 12px;">
@@ -1157,7 +1157,7 @@ export default function Payments() {
       return;
     }
 
-    const paidNow = Number(payment.amount_paid ?? payment.amount) || 0;
+    const paidNow = getEffectivePaymentCollected(payment);
     const netTotal = Number(payment.amount) || 0;
     const remBalance = Math.max(0, netTotal - paidNow);
     const splitSecondaryMethod = (payment as any).secondaryMethod;
@@ -1265,7 +1265,7 @@ export default function Payments() {
 
     let grandTotalCollected = 0;
     for (const p of activePayments) {
-      const paidVal = Number(p.amount_paid ?? p.amount) || 0;
+      const paidVal = getEffectivePaymentCollected(p);
       const secMethod = (p as any).secondaryMethod as string | undefined;
       const priAmt = Number((p as any).primaryTenderAmount) || 0;
       const secAmt = Number((p as any).secondaryTenderAmount) || 0;
@@ -1509,12 +1509,11 @@ export default function Payments() {
         if (canonicalResolved !== canonicalFilter) return false;
       }
 
-      // Date filter
-      if (deferredFilterDateFrom) {
-        if (payment.date.substring(0, 10) < deferredFilterDateFrom) return false;
-      }
-      if (deferredFilterDateTo) {
-        if (payment.date.substring(0, 10) > deferredFilterDateTo) return false;
+      // Date filter (matched in Cairo gym timezone for parity with Dashboard & Shift reports)
+      if (deferredFilterDateFrom || deferredFilterDateTo) {
+        const payDateStr = getGymDateString(payment.date) || String(payment.date || '').substring(0, 10);
+        if (deferredFilterDateFrom && payDateStr < deferredFilterDateFrom) return false;
+        if (deferredFilterDateTo && payDateStr > deferredFilterDateTo) return false;
       }
 
       // Package filter
@@ -1571,7 +1570,7 @@ export default function Payments() {
     for (const p of filteredPayments) {
       if (p.status === 'refunded') continue;
       if (p.coachName) {
-        map[p.coachName] = (map[p.coachName] || 0) + (Number(p.amount) || 0);
+        map[p.coachName] = (map[p.coachName] || 0) + getEffectivePaymentCollected(p);
       }
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
@@ -1604,8 +1603,9 @@ export default function Payments() {
       if (!totals[branch]) totals[branch] = { Cash: 0, 'Credit Card': 0, 'Bank Transfer': 0, Instapay: 0, Other: 0, Total: 0 };
       const row = totals[branch]!;
       const m = (METHODS as readonly string[]).includes(p.method) ? p.method : 'Other';
-      row[m] = (row[m] || 0) + (Number(p.amount) || 0);
-      row.Total = (row.Total || 0) + (Number(p.amount) || 0);
+      const collected = getEffectivePaymentCollected(p);
+      row[m] = (row[m] || 0) + collected;
+      row.Total = (row.Total || 0) + collected;
     }
     return totals;
   }, [canViewBranchTotals, filteredPayments, clients]);
@@ -3686,8 +3686,9 @@ export default function Payments() {
                                           ? (payment.salesName || resolveUserDisplay(repId, users, ''))
                                           : editSalesName;
 
+                                        const amountUpdates = buildSyncedPaymentAmountUpdates(payment, parseFloat(editAmount));
                                         await updatePayment(payment.id, {
-                                          amount: parseFloat(editAmount),
+                                          ...amountUpdates,
                                           notes: editNotes || undefined,
                                           branch: editBranch || undefined,
                                           branchId: toCanonicalBranchId(editBranch) || undefined,
