@@ -14,9 +14,11 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { isFirestoreQuotaOrUnavailableError } from './src/utils/firestoreQuota.js';
 import {
+  getQuotaAlertHistory,
   getQuotaStatus,
   isQuotaShieldActive,
   markQuotaExhausted,
+  onQuotaStateTransition,
   recordFirestoreReads,
   resetQuotaShieldProbe,
   shouldDeferBackgroundJob,
@@ -27,6 +29,16 @@ import {
   isCloudBackupConfigured,
   runIncrementalCloudBackup,
 } from './src/services/quotaBackupService.js';
+import {
+  ALLOWED_ARCHIVE_BUCKETS,
+  getArchiveMeta,
+  getEdgeMonitorHealth,
+  getMemberArchivedAttendance,
+  getOrRefreshEdgeMonitorHealth,
+  putArchiveBucket,
+  searchHistoricalArchive,
+  type ArchiveDatasetType,
+} from './src/services/historicalArchiveService.js';
 import {
   defaultFirebaseConfig,
   strikeCrmConfig,
@@ -89,6 +101,47 @@ if (admin.apps.length === 0) {
     ? 'strike-production-f5242'
     : process.env.FIREBASE_PROJECT_ID || 'inzan-crm-spark-26';
   getAdminAppForProject(initialProjectId);
+}
+
+// Register Quota Shield transition notifier once on gateway startup
+let quotaTransitionHookRegistered = false;
+if (!quotaTransitionHookRegistered) {
+  quotaTransitionHookRegistered = true;
+  onQuotaStateTransition((alert) => {
+    console.warn('[QUOTA-ALERT]', JSON.stringify(alert));
+    const webhookUrl = String(process.env.QUOTA_ALERT_WEBHOOK_URL || '').trim();
+    if (webhookUrl) {
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'quota_shield_transition', alert }),
+        signal: AbortSignal.timeout(5000),
+      }).catch((err) => {
+        console.warn('[QUOTA-ALERT] Webhook delivery failed:', err?.message || err);
+      });
+    }
+    const brevoKey = String(process.env.BREVO_API_KEY || '').trim();
+    const alertEmail = String(process.env.QUOTA_ALERT_EMAIL || '').trim();
+    if (brevoKey && alertEmail) {
+      const fromEmail = String(process.env.BREVO_SENDER_EMAIL || 'alerts@mitrixo.com').trim();
+      fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'Mitrixo Quota Shield', email: fromEmail },
+          to: [{ email: alertEmail }],
+          subject: `[Mitrixo] ${alert.tenantId} Quota Shield -> ${alert.toState.toUpperCase()}`,
+          textContent: `Tenant ${alert.tenantId} transitioned from ${alert.fromState} to ${alert.toState} (${alert.pacificDate}). Reads: ${alert.reads}, Writes: ${alert.writes}. Reason: ${alert.reason || 'threshold reached'}.`,
+        }),
+        signal: AbortSignal.timeout(5000),
+      }).catch((err) => {
+        console.warn('[QUOTA-ALERT] Brevo email delivery failed:', err?.message || err);
+      });
+    }
+  });
 }
 
 // ===============================================================
@@ -823,12 +876,22 @@ async function startServer() {
         isStandaloneMode() ? 'strike' : 'inzanathletics'
       );
       const status = getQuotaStatus(tenantId);
-      const backupMeta = await getBackupMeta(tenantId);
+      const [backupMeta, edgeMonitor] = await Promise.all([
+        getBackupMeta(tenantId),
+        getOrRefreshEdgeMonitorHealth({
+          state: status.state,
+          readPercent: status.readPercent,
+          reads: status.reads,
+          readLimit: status.readLimit,
+        }),
+      ]);
       res.json({
         ok: true,
         status,
         backupMeta,
         cloudBackupConfigured: isCloudBackupConfigured(),
+        alerts: getQuotaAlertHistory(tenantId),
+        edgeMonitor,
       });
     } catch (err: any) {
       console.error("[API] Error getting quota status:", err);
@@ -922,6 +985,146 @@ async function startServer() {
       res.status(500).json({ error: err?.message || "Failed to reset quota shield probe" });
     }
   });
+
+  // ── Zero-Firestore-Read Historical Archive Endpoints (Cloudflare KV) ─────────
+  const ARCHIVE_STAFF_ROLES = new Set([
+    'crm_admin',
+    'super_admin',
+    'admin',
+    'manager',
+    'fitness_manager',
+    'rep',
+    'coach',
+    'trainer',
+  ]);
+  const ARCHIVE_ALLOWED_TYPES = new Set<ArchiveDatasetType>([
+    'leads',
+    'invitations',
+    'callCenterLog',
+    'attendance',
+  ]);
+
+  function isArchiveStaffCaller(req: express.Request): boolean {
+    const userEmail = String((req as any).user?.email || '').toLowerCase();
+    const role = String((req as any).tenantRole || (req as any).user?.role || '').toLowerCase();
+    return (
+      userEmail === PLATFORM_SUPER_ADMIN_EMAIL ||
+      userEmail === 'magd.gallab@gmail.com' ||
+      ARCHIVE_STAFF_ROLES.has(role)
+    );
+  }
+
+  app.get("/api/archive/meta", requireAuth, async (req, res) => {
+    try {
+      if (!isArchiveStaffCaller(req)) {
+        res.status(403).json({ error: "Forbidden: Staff role required for historical archive." });
+        return;
+      }
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+          (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const result = await getArchiveMeta(tenantId);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[API] Error reading archive meta:", err);
+      res.status(500).json({ error: err?.message || "Failed to load archive metadata" });
+    }
+  });
+
+  app.get("/api/archive/member-attendance", requireAuth, async (req, res) => {
+    try {
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+          (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const clientId = String(req.query.clientId || '').trim();
+      const memberId = String(req.query.memberId || '').trim();
+      if (!clientId && !memberId) {
+        res.status(400).json({ error: "clientId or memberId query parameter is required." });
+        return;
+      }
+
+      if (!isArchiveStaffCaller(req)) {
+        const ownDocId = String((req as any).user?.clientDocId || '').trim();
+        const ownRecId = String((req as any).user?.clientRecordId || '').trim();
+        const matchesOwn =
+          (clientId && (clientId === ownDocId || clientId === ownRecId)) ||
+          (memberId && (memberId === ownDocId || memberId === ownRecId));
+        if (!matchesOwn) {
+          res.status(403).json({ error: "Forbidden: You can only inspect your own attendance archive." });
+          return;
+        }
+      }
+
+      const result = await getMemberArchivedAttendance(tenantId, [clientId, memberId].filter(Boolean));
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[API] Error reading archived member attendance:", err);
+      res.status(500).json({ error: err?.message || "Failed to load archived attendance" });
+    }
+  });
+
+  app.get("/api/archive/search", requireAuth, async (req, res) => {
+    try {
+      if (!isArchiveStaffCaller(req)) {
+        res.status(403).json({ error: "Forbidden: Staff role required for archive search." });
+        return;
+      }
+      const type = String(req.query.type || 'leads').trim() as ArchiveDatasetType;
+      if (!ARCHIVE_ALLOWED_TYPES.has(type)) {
+        res.status(400).json({ error: "Invalid archive type. Allowed: leads, invitations, callCenterLog, attendance." });
+        return;
+      }
+      const q = String(req.query.q || '').slice(0, 120);
+      const limitCount = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+      const tenantId = String(
+        (req as any).resolvedTenantId ||
+          (await getTenantIdForRequest(req).catch(() => (isStandaloneMode() ? 'strike' : 'inzanathletics')))
+      );
+      const result = await searchHistoricalArchive(tenantId, type, q, limitCount);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[API] Error searching archive:", err);
+      res.status(500).json({ error: err?.message || "Failed to search historical archive" });
+    }
+  });
+
+  app.post(
+    "/api/admin/archive-upload/:bucket",
+    express.raw({ type: ['application/octet-stream', 'application/gzip'], limit: '10mb' }),
+    async (req, res) => {
+      try {
+        const cronSecret = process.env.CRON_SECRET;
+        if (!cronSecret || req.headers['x-cron-secret'] !== cronSecret) {
+          res.status(401).json({ error: "Unauthorized archive upload trigger" });
+          return;
+        }
+        const bucket = String(req.params.bucket || '').trim();
+        if (!ALLOWED_ARCHIVE_BUCKETS.has(bucket as any)) {
+          res.status(400).json({ error: `Invalid archive bucket "${bucket}".` });
+          return;
+        }
+        if (!Buffer.isBuffer(req.body) || req.body.byteLength === 0) {
+          res.status(400).json({ error: "Empty archive payload." });
+          return;
+        }
+        const tenantId = await getTenantIdForRequest(req).catch(() =>
+          isStandaloneMode() ? 'strike' : 'inzanathletics'
+        );
+        await putArchiveBucket(tenantId, bucket, req.body);
+        res.json({
+          ok: true,
+          tenantId,
+          bucket,
+          bytes: req.body.byteLength,
+        });
+      } catch (err: any) {
+        console.error("[API] Archive upload error:", err);
+        res.status(500).json({ error: err?.message || "Failed to store archive bucket" });
+      }
+    }
+  );
 
   // Free-tier Firestore-backed media storage for Spark projects without Firebase Storage buckets.
   // Strike (and any tenant using Firebase Storage directly) never calls this endpoint.

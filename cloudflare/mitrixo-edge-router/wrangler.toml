@@ -7,3 +7,7 @@ GATEWAY_ORIGIN = "https://mitrixo-gateway.onrender.com"
 
 [triggers]
 crons = ["*/5 * * * *", "01 22 * * *"]
+
+[[kv_namespaces]]
+binding = "QUOTA_BACKUPS"
+id = "f5c1425902a7479cad5b3c7809c477a2"

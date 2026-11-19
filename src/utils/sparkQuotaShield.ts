@@ -14,6 +14,20 @@ export const SPARK_SHIELD_WRITE_THRESHOLD = 18_000;
 
 export type QuotaState = 'normal' | 'conserve' | 'shield_active';
 
+export interface QuotaAlertEvent {
+  id: string;
+  tenantId: string;
+  fromState: QuotaState;
+  toState: QuotaState;
+  pacificDate: string;
+  reads: number;
+  writes: number;
+  reason?: string;
+  timestamp: string;
+}
+
+export type QuotaAlertListener = (alert: QuotaAlertEvent, status: QuotaStatus) => void;
+
 export interface QuotaStatus {
   tenantId: string;
   pacificDate: string;
@@ -36,11 +50,14 @@ interface TenantQuotaMeter {
   reads: number;
   writes: number;
   exhaustedLatch: boolean;
+  lastAlertedState: QuotaState;
+  alerts: QuotaAlertEvent[];
   reason?: string;
   updatedAt: string;
 }
 
 const tenantMeters = new Map<string, TenantQuotaMeter>();
+const alertListeners = new Set<QuotaAlertListener>();
 
 const PACIFIC_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
@@ -105,10 +122,53 @@ function getOrRotateMeter(tenantId: string, now: Date = new Date()): TenantQuota
     reads: 0,
     writes: 0,
     exhaustedLatch: false,
+    lastAlertedState: 'normal',
+    alerts: [],
     updatedAt: now.toISOString(),
   };
   tenantMeters.set(key, fresh);
   return fresh;
+}
+
+const STATE_RANK: Record<QuotaState, number> = {
+  normal: 0,
+  conserve: 1,
+  shield_active: 2,
+};
+
+function maybeNotifyStateTransition(
+  tenantId: string,
+  meter: TenantQuotaMeter,
+  prevState: QuotaState,
+  now: Date
+): QuotaStatus {
+  const status = buildStatus(tenantId, meter, now);
+  if (
+    status.state !== 'normal' &&
+    STATE_RANK[status.state] > STATE_RANK[meter.lastAlertedState]
+  ) {
+    const alert: QuotaAlertEvent = {
+      id: `${meter.pacificDate}:${meter.lastAlertedState}->${status.state}:${meter.alerts.length + 1}`,
+      tenantId: status.tenantId,
+      fromState: prevState,
+      toState: status.state,
+      pacificDate: meter.pacificDate,
+      reads: status.reads,
+      writes: status.writes,
+      ...(status.reason ? { reason: status.reason } : {}),
+      timestamp: now.toISOString(),
+    };
+    meter.lastAlertedState = status.state;
+    meter.alerts = [alert, ...meter.alerts].slice(0, 10);
+    for (const listener of alertListeners) {
+      try {
+        listener(alert, status);
+      } catch {
+        // Alert listeners must never disrupt request paths
+      }
+    }
+  }
+  return status;
 }
 
 function computeState(meter: TenantQuotaMeter): QuotaState {
@@ -148,6 +208,18 @@ function buildStatus(tenantId: string, meter: TenantQuotaMeter, now: Date = new 
   };
 }
 
+export function onQuotaStateTransition(listener: QuotaAlertListener): () => void {
+  alertListeners.add(listener);
+  return () => {
+    alertListeners.delete(listener);
+  };
+}
+
+export function getQuotaAlertHistory(tenantId: string, now: Date = new Date()): QuotaAlertEvent[] {
+  const meter = getOrRotateMeter(tenantId, now);
+  return [...meter.alerts];
+}
+
 export function getQuotaStatus(tenantId: string, now: Date = new Date()): QuotaStatus {
   const meter = getOrRotateMeter(tenantId, now);
   return buildStatus(tenantId, meter, now);
@@ -155,22 +227,24 @@ export function getQuotaStatus(tenantId: string, now: Date = new Date()): QuotaS
 
 export function recordFirestoreReads(tenantId: string, count: number, now: Date = new Date()): QuotaStatus {
   const meter = getOrRotateMeter(tenantId, now);
+  const prevState = computeState(meter);
   const delta = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
   if (delta > 0) {
     meter.reads += delta;
     meter.updatedAt = now.toISOString();
   }
-  return buildStatus(tenantId, meter, now);
+  return maybeNotifyStateTransition(tenantId, meter, prevState, now);
 }
 
 export function recordFirestoreWrites(tenantId: string, count: number, now: Date = new Date()): QuotaStatus {
   const meter = getOrRotateMeter(tenantId, now);
+  const prevState = computeState(meter);
   const delta = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
   if (delta > 0) {
     meter.writes += delta;
     meter.updatedAt = now.toISOString();
   }
-  return buildStatus(tenantId, meter, now);
+  return maybeNotifyStateTransition(tenantId, meter, prevState, now);
 }
 
 export function markQuotaExhausted(
@@ -179,10 +253,11 @@ export function markQuotaExhausted(
   now: Date = new Date()
 ): QuotaStatus {
   const meter = getOrRotateMeter(tenantId, now);
+  const prevState = computeState(meter);
   meter.exhaustedLatch = true;
   meter.reason = String(reason || 'FIRESTORE_QUOTA_EXCEEDED').slice(0, 240);
   meter.updatedAt = now.toISOString();
-  return buildStatus(tenantId, meter, now);
+  return maybeNotifyStateTransition(tenantId, meter, prevState, now);
 }
 
 /**
@@ -199,6 +274,7 @@ export function resetQuotaShieldProbe(tenantId: string, now: Date = new Date()):
   if (meter.writes >= SPARK_SHIELD_WRITE_THRESHOLD) {
     meter.writes = 0;
   }
+  meter.lastAlertedState = computeState(meter);
   meter.updatedAt = now.toISOString();
   return buildStatus(tenantId, meter, now);
 }
@@ -213,4 +289,5 @@ export function isQuotaShieldActive(tenantId: string, now: Date = new Date()): b
 
 export function __clearAllQuotaMetersForTests(): void {
   tenantMeters.clear();
+  alertListeners.clear();
 }

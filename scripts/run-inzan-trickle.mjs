@@ -15,18 +15,48 @@ const STATE_PATH = path.join(RESCUE_DIR, 'inzan_trickle_state.json');
 function parseArgs(argv) {
   let maxWrites = 16500;
   let dryRun = false;
+  let recentOnly = false;
   let includeAttendanceHistory = false;
   let includeLetterClients = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') dryRun = true;
+    else if (a === '--recent-only') recentOnly = true;
     else if (a === '--include-attendance-history') includeAttendanceHistory = true;
     else if (a === '--include-letter-clients') includeLetterClients = true;
     else if (a === '--max-writes' && argv[i + 1]) {
       maxWrites = Math.max(1, Number.parseInt(argv[++i], 10) || 16500);
     }
   }
-  return { maxWrites, dryRun, includeAttendanceHistory, includeLetterClients };
+  return { maxWrites, dryRun, recentOnly, includeAttendanceHistory, includeLetterClients };
+}
+
+function getFieldString(fields, key) {
+  const val = fields?.[key];
+  if (!val || typeof val !== 'object') return String(val || '');
+  if ('stringValue' in val) return String(val.stringValue || '');
+  if ('timestampValue' in val) return String(val.timestampValue || '');
+  return '';
+}
+
+function isRecentOperationalRecord(bucket, fields) {
+  if (bucket === 'leads') {
+    const created = getFieldString(fields, 'createdAt').slice(0, 10);
+    return created >= '2026-09-01';
+  }
+  if (bucket === 'invitations') {
+    const dt = getFieldString(fields, 'date').slice(0, 10);
+    return dt >= '2026-09-01';
+  }
+  if (bucket === 'callCenterLog') {
+    const created = getFieldString(fields, 'createdAt').slice(0, 10);
+    return created >= '2026-09-01';
+  }
+  if (bucket === 'attendance') {
+    const dt = getFieldString(fields, 'date').slice(0, 10);
+    return dt >= '2026-11-01';
+  }
+  return false;
 }
 
 function decodeFirestoreVal(v) {
@@ -243,6 +273,10 @@ async function main() {
       const bucket = getBucketKey(rp);
       const isAttHist = bucket.endsWith('/attendance_history');
       if (isAttHist && !opts.includeAttendanceHistory) {
+        remainingTotalByBucket[bucket] = (remainingTotalByBucket[bucket] || 0) + 1;
+        continue;
+      }
+      if (opts.recentOnly && !isRecentOperationalRecord(bucket, w.fields)) {
         remainingTotalByBucket[bucket] = (remainingTotalByBucket[bucket] || 0) + 1;
         continue;
       }

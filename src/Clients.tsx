@@ -3501,8 +3501,8 @@ function Clients() {
         <div className="flex flex-col md:flex-row items-end gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
           <div className="flex-1 w-full space-y-1.5">
             <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('members.search_placeholder')}</Label>
-            <div className="relative flex items-center gap-2">
-              <div className="relative flex-1">
+            <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                   placeholder={t('members.search_placeholder')} 
@@ -3517,20 +3517,21 @@ function Clients() {
                 {(searchTerm || searchQuery) && (
                   <button
                     type="button"
+                    data-compact="true"
                     onClick={() => { setSearchTerm(''); setSearchQuery(''); }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
                     title="Clear search"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
-              <div className="relative w-[170px] sm:w-[215px] shrink-0">
+              <div className="relative w-full sm:w-[215px] shrink-0">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-primary select-none">#</span>
                 <Input
                   placeholder="ID # (3075, Q, C, P, O)"
                   title="Search by Member ID or Prefix Code: Q (SGF/Kickboxing), C (Cure Clinic), P (Partners/Family), O (Youth)"
-                  className="pl-7 pr-7 h-11 bg-muted/30 border border-primary/20 focus-visible:ring-1 font-mono text-sm"
+                  className="pl-7 pr-8 h-11 bg-muted/30 border border-primary/20 focus-visible:ring-1 font-mono text-sm"
                   value={idSearchTerm}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -3542,12 +3543,13 @@ function Clients() {
                 {idSearchTerm && (
                   <button
                     type="button"
+                    data-compact="true"
                     onClick={() => {
                       idSearchUserEditedRef.current = false;
                       setIdSearchTerm('');
                       if (!searchTerm.trim()) setSearchQuery('');
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
                     title="Clear ID filter"
                   >
                     <X className="h-3.5 w-3.5" />

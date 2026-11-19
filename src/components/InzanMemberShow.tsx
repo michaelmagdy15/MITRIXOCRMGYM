@@ -55,6 +55,8 @@ import {
   InzanMemberLockerStatus,
 } from '../utils/inzanLockerClient';
 
+const ARCHIVE_ATTENDANCE_CACHE = new Map<string, any[]>();
+
 const getSafeCleanMemberId = (val: any): string | null => {
   if (!val) return null;
   if (typeof val === 'object') return null;
@@ -932,10 +934,17 @@ export function InzanMemberShow({
   const [salesTransfers, setSalesTransfers] = useState<SalesTransferLog[]>([]);
   const [trainerTransfers, setTrainerTransfers] = useState<TrainerTransferLog[]>([]);
   const [subcolAttendances, setSubcolAttendances] = useState<any[]>([]);
+  const [archivedAttendances, setArchivedAttendances] = useState<any[]>([]);
+  const [loadingArchivedAttendances, setLoadingArchivedAttendances] = useState(false);
+  const [activitiesVisibleLimit, setActivitiesVisibleLimit] = useState(50);
 
-  // Fetch attendance_history subcollection (includes all 84,000+ RedGITS historical & live check-ins)
   React.useEffect(() => {
-    if (!client?.id) return;
+    setActivitiesVisibleLimit(50);
+  }, [client.id]);
+
+  // Fetch attendance_history subcollection only when the Activity tab is open (0 reads on Overview open)
+  React.useEffect(() => {
+    if (!client?.id || activeTab !== 'activities') return;
     const qAtt = query(collection(db, 'clients', client.id, 'attendance_history'), limit(250));
     const unsubAtt = onSnapshot(qAtt, snap => {
       setSubcolAttendances(snap.docs.map(d => {
@@ -955,6 +964,48 @@ export function InzanMemberShow({
     }, () => setSubcolAttendances([]));
     return unsubAtt;
   }, [client.id, activeTab]);
+
+  // Lazy-fetch Cloudflare KV historical attendance archive when Activity tab is opened (0 Firestore reads)
+  React.useEffect(() => {
+    if (!client?.id || activeTab !== 'activities') return;
+    const cacheKey = `${client.id}|${client.memberId || ''}`;
+    const cached = ARCHIVE_ATTENDANCE_CACHE.get(cacheKey);
+    if (cached) {
+      setArchivedAttendances(cached);
+      return;
+    }
+
+    let active = true;
+    setLoadingArchivedAttendances(true);
+    (async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken().catch(() => null);
+        if (!token || !active) return;
+        const params = new URLSearchParams({
+          clientId: client.id,
+          ...(client.memberId ? { memberId: String(client.memberId) } : {}),
+        });
+        const res = await fetch(`/api/archive/member-attendance?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const rows = Array.isArray(data?.items)
+          ? data.items.map((item: any) => ({ ...item, isArchived: true }))
+          : [];
+        ARCHIVE_ATTENDANCE_CACHE.set(cacheKey, rows);
+        if (active) setArchivedAttendances(rows);
+      } catch {
+        // Ignore transient archive load failure
+      } finally {
+        if (active) setLoadingArchivedAttendances(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [client.id, client.memberId, activeTab]);
 
   // Fetch sales transfer logs
   React.useEffect(() => {
@@ -1201,14 +1252,16 @@ export function InzanMemberShow({
     const topLevel = attendances.filter(a => a.clientId === client.id);
     const seenDates = new Set<string>();
     const merged: any[] = [];
-    for (const item of [...topLevel, ...subcolAttendances]) {
+    for (const item of [...topLevel, ...subcolAttendances, ...archivedAttendances]) {
       const dateKey = (item.date || '').slice(0, 19);
       if (dateKey && seenDates.has(dateKey)) continue;
       if (dateKey) seenDates.add(dateKey);
       merged.push(item);
     }
-    return merged;
-  }, [attendances, subcolAttendances, client.id]);
+    return merged.sort(
+      (a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0)
+    );
+  }, [attendances, subcolAttendances, archivedAttendances, client.id]);
 
   // Helper for displaying fields
   const renderField = (
@@ -3445,11 +3498,23 @@ export function InzanMemberShow({
 
         {activeTab === 'activities' && (
           <div className="space-y-4 text-left">
-            <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="text-sm font-bold uppercase text-primary">Activity & Check-in History</h3>
-              <Badge variant="secondary" className="border-none">
-                {clientAttendances.length} entries
-              </Badge>
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold uppercase text-primary">Activity & Check-in History</h3>
+                {loadingArchivedAttendances && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="secondary" className="border-none">
+                  {clientAttendances.length} entries
+                </Badge>
+                {clientAttendances.some((a) => a.isArchived) && (
+                  <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 dark:text-amber-300">
+                    {clientAttendances.filter((a) => a.isArchived).length} archived
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="rounded-xl border border-border bg-background overflow-hidden overflow-x-auto shadow-sm">
@@ -3466,32 +3531,53 @@ export function InzanMemberShow({
                 </TableHeader>
                 <TableBody>
                   {clientAttendances.length > 0 ? (
-                    [...clientAttendances]
-                      .sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))
+                    clientAttendances
+                      .slice(0, activitiesVisibleLimit)
                       .map(a => (
                         <TableRow key={a.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
                           <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{safeFormatDate(a.date, 'dd MMM yyyy HH:mm:ss')}</TableCell>
                           <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{a.checkOutTime || '—'}</TableCell>
                           <TableCell className="py-3 px-4 text-xs font-semibold text-foreground">{a.packageName || 'Attendance Check-in'}</TableCell>
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{a.locker && !a.locker.endsWith(' 0') ? a.locker : '—'}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{a.locker && !String(a.locker).endsWith(' 0') ? a.locker : '—'}</TableCell>
                           <TableCell className="py-3 px-4 text-xs text-muted-foreground">{a.recordedByName || 'Front Desk'}</TableCell>
                           <TableCell className="py-3 px-4 text-center">
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px]">
-                              {a.status || 'Checked In'}
-                            </Badge>
+                            <div className="inline-flex items-center gap-1">
+                              <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px]">
+                                {a.status || 'Checked In'}
+                              </Badge>
+                              {a.isArchived && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 border-amber-500/30 text-amber-600 dark:text-amber-300">
+                                  Archive
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
                   ) : (
                     <TableRow>
                       <TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">
-                        No activity records found.
+                        {loadingArchivedAttendances ? 'Loading archived check-ins...' : 'No activity records found.'}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
+
+            {clientAttendances.length > activitiesVisibleLimit && (
+              <div className="flex justify-center pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActivitiesVisibleLimit((prev) => prev + 50)}
+                  className="text-xs font-semibold"
+                >
+                  Show more ({clientAttendances.length - activitiesVisibleLimit} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

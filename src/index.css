@@ -320,15 +320,15 @@ tbody tr {
       0 10px 30px -10px rgba(0, 0, 0, 0.5);
   }
   
-  /* Global card hover enhancement */
-  .rounded-2xl.border, .rounded-xl.border, .border.rounded-lg {
+  /* Opt-in interactive card hover elevation (avoids jitter on static containers/tables) */
+  .interactive-card {
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s;
   }
-  .rounded-2xl.border:hover, .rounded-xl.border:hover, .border.rounded-lg:hover {
+  .interactive-card:hover {
     border-color: color-mix(in srgb, var(--primary) 30%, transparent);
     box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.05);
   }
-  .dark .rounded-2xl.border:hover, .dark .rounded-xl.border:hover, .dark .border.rounded-lg:hover {
+  .dark .interactive-card:hover {
     box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.35);
   }
   .text-gradient {
@@ -586,12 +586,12 @@ html, body, #root {
   }
 }
 
-/* Apple HIG & Material Touch Targets (44x44px min hit box on touchscreens) */
+/* Apple HIG & Material Touch Targets (44x44px min hit box on primary touchscreens; exclude compact inline controls) */
 @media (pointer: coarse) {
-  button,
-  [role="button"],
-  input[type="button"],
-  input[type="submit"],
+  button:not([data-compact]):not(.h-6):not(.h-7):not(.h-8),
+  [role="button"]:not([data-compact]):not(.h-6):not(.h-7):not(.h-8),
+  input[type="button"]:not([data-compact]),
+  input[type="submit"]:not([data-compact]),
   .touch-target {
     min-height: 44px;
     min-width: 44px;

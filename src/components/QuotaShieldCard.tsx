@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Shield, CloudUpload, RefreshCw, RotateCcw, Database } from 'lucide-react';
+import { Shield, CloudUpload, RefreshCw, RotateCcw, Database, Activity, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { auth } from '../firebase';
 
@@ -41,6 +41,31 @@ interface BackupMetaPayload {
   };
 }
 
+interface QuotaAlertPayload {
+  id: string;
+  fromState: string;
+  toState: string;
+  reads: number;
+  writes: number;
+  reason?: string;
+  timestamp: string;
+}
+
+interface EdgeMonitorPayload {
+  checkedAt: string;
+  overallOk: boolean;
+  checks: Record<
+    string,
+    {
+      ok: boolean;
+      status: number;
+      latencyMs: number;
+      quotaState?: string;
+    }
+  >;
+  history?: Array<{ t: string; ok: boolean }>;
+}
+
 function formatResetCountdown(nextResetIso?: string): string {
   if (!nextResetIso) return '—';
   const targetMs = Date.parse(nextResetIso);
@@ -52,6 +77,16 @@ function formatResetCountdown(nextResetIso?: string): string {
   return `${localTime} (in ${hours}h ${mins}m)`;
 }
 
+function formatRelativeAgo(iso?: string): string {
+  if (!iso) return '—';
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return '—';
+  const diffMin = Math.max(0, Math.round((Date.now() - ts) / 60_000));
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  return `${Math.round(diffMin / 60)}h ago`;
+}
+
 export default function QuotaShieldCard() {
   const [loading, setLoading] = useState(true);
   const [runningBackup, setRunningBackup] = useState(false);
@@ -60,6 +95,8 @@ export default function QuotaShieldCard() {
   const [status, setStatus] = useState<QuotaStatusPayload | null>(null);
   const [backupMeta, setBackupMeta] = useState<BackupMetaPayload | null>(null);
   const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [alerts, setAlerts] = useState<QuotaAlertPayload[]>([]);
+  const [edgeMonitor, setEdgeMonitor] = useState<EdgeMonitorPayload | null>(null);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -73,6 +110,8 @@ export default function QuotaShieldCard() {
       setStatus(data.status || null);
       setBackupMeta(data.backupMeta || null);
       setCloudConfigured(Boolean(data.cloudBackupConfigured));
+      setAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+      setEdgeMonitor(data.edgeMonitor || null);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Unable to load quota shield status.');
     } finally {
@@ -145,6 +184,12 @@ export default function QuotaShieldCard() {
       ? { label: 'CONSERVE MODE', cls: 'bg-amber-500 text-black border-amber-500' }
       : { label: 'NORMAL', cls: 'bg-emerald-600 text-white border-emerald-600' };
 
+  const historyArr = Array.isArray(edgeMonitor?.history) ? edgeMonitor.history : [];
+  const uptimePercent =
+    historyArr.length > 0
+      ? Math.round((historyArr.filter((h) => h.ok).length / historyArr.length) * 100)
+      : null;
+
   return (
     <Card className="md:col-span-2 border-primary/20">
       <CardHeader className="pb-3">
@@ -166,6 +211,7 @@ export default function QuotaShieldCard() {
               type="button"
               variant="ghost"
               size="sm"
+              data-compact="true"
               onClick={() => loadStatus()}
               disabled={loading}
               className="h-7 px-2"
@@ -242,6 +288,72 @@ export default function QuotaShieldCard() {
                     : 'Cloudflare KV backup credentials are not set on the gateway.'}
                 </p>
               )}
+            </div>
+          </div>
+        )}
+
+        {edgeMonitor && (
+          <div className="p-3 rounded-lg border bg-muted/15 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                Live Platform Health (Edge Monitor)
+              </span>
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                {uptimePercent !== null && (
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {uptimePercent}% ({historyArr.length}-check window)
+                  </Badge>
+                )}
+                <span>Checked {formatRelativeAgo(edgeMonitor.checkedAt)}</span>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
+              {[
+                { key: 'inzanGateway', label: 'Inzan Gateway' },
+                { key: 'strikeProduction', label: 'Strike Production' },
+                { key: 'vbtPortal', label: 'VBT Portal' },
+              ].map(({ key, label }) => {
+                const probe = edgeMonitor.checks?.[key];
+                const ok = Boolean(probe?.ok);
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5"
+                  >
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          !probe ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'
+                        }`}
+                      />
+                      {label}
+                    </span>
+                    <span className="font-mono text-muted-foreground">
+                      {probe ? `${probe.latencyMs}ms` : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {alerts.length > 0 && (
+          <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-300">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Recent Quota Shield Transitions ({alerts.length})
+            </div>
+            <div className="space-y-1 text-[11px] text-muted-foreground font-mono">
+              {alerts.slice(0, 3).map((a) => (
+                <div key={a.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    {a.fromState} → <strong className="text-foreground">{a.toState}</strong> ({a.reads} reads / {a.writes} writes)
+                  </span>
+                  <span>{new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

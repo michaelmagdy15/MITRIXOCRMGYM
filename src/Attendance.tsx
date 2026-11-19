@@ -61,6 +61,12 @@ import { collection, query, where, getDoc, getDocs, limit, onSnapshot, doc, upda
 import { getPreferredMemberCode, getMemberCodeSearchVariants, getInzanMemberCodeMeta } from './constants';
 import { searchMembersLocal } from './services/localDb';
 import { getEgyptPhoneVariants } from './utils/phoneUtils';
+import { isFirestoreQuotaOrUnavailableError } from './utils/firestoreQuota';
+import {
+  dispatchQuotaFailoverEvent,
+  fetchTenantBackupSnapshot,
+  findMemberInBackupClients,
+} from './utils/backupFailover';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 import { AttendanceReconciliationModal } from './components/attendance/AttendanceReconciliationModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -1432,6 +1438,29 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }
     }
 
+    if (!member && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const snap = await fetchTenantBackupSnapshot(getTenantId());
+        if (snap?.collections?.clients) {
+          const backupClients = Object.values(snap.collections.clients) as any[];
+          const matchedBackup = findMemberInBackupClients(backupClients, lookupToken);
+          if (matchedBackup) {
+            member = { ...matchedBackup, _fromBackupSnapshot: true };
+            dispatchQuotaFailoverEvent({
+              active: true,
+              lastBackupAt: snap.lastBackupAt,
+              count: backupClients.length,
+            });
+            if (!isKiosk) {
+              toast.info('Member verified via Cloud Backup Snapshot (Read-Only)');
+            }
+          }
+        }
+      } catch {
+        // Ignore cloud backup lookup errors
+      }
+    }
+
     if (!member) {
       appendWrongEntryLog({
         memberId: lookupToken,
@@ -1585,7 +1614,11 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           resetInputForNextCheckin();
         }, 2200);
       } catch (err: any) {
-        setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
+        if ((member as any)?._fromBackupSnapshot && isFirestoreQuotaOrUnavailableError(err)) {
+          setError('Member verified via Cloud Backup Snapshot (Read-Only): live Firestore write skipped until Spark quota resets.');
+        } else {
+          setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
+        }
         resetInputForNextCheckin();
         setTimeout(() => {
           setError(null);
@@ -2029,7 +2062,7 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
       )}
 
-      <div className={`grid grid-cols-1 lg:grid-cols-12 items-start no-print ${isInzan ? 'gap-6 lg:gap-8' : 'gap-4 sm:gap-5'}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-12 items-start no-print ${isInzan ? 'gap-5 lg:gap-7' : 'gap-4 sm:gap-5'}`}>
         {/* Scanner & Lookup Section */}
         <Card className="lg:col-span-5 overflow-hidden border border-primary/15 shadow-md py-0 gap-0">
           <div className={`bg-primary/5 border-b flex items-center justify-between gap-2 ${isInzan ? 'py-3.5 px-5' : 'py-2.5 px-4'}`}>
@@ -2055,7 +2088,7 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             />
           </div>
 
-          <div className={`bg-muted/20 ${isInzan ? 'p-5 sm:p-6 space-y-5' : 'p-3.5 space-y-3'}`}>
+          <div className={`bg-muted/20 ${isInzan ? 'p-4 sm:p-5 space-y-4' : 'p-3.5 space-y-3'}`}>
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
             {!isKiosk && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -2109,14 +2142,14 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       ? 'Enter Invitation Serial or Guest Phone...'
                       : t('attendance.enter_member_id')
                   }
-                  className={`bg-background ${isInzan ? 'h-11 text-base font-mono' : 'h-10'}`}
+                  className={`min-w-0 flex-1 bg-background ${isInzan ? 'h-11 text-base font-mono' : 'h-10'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleScanSuccess(e.currentTarget.value);
                   }}
                 />
                 <Button 
                   variant="secondary" 
-                  className={`${isInzan ? 'h-11 px-5' : 'h-10 px-4'} font-bold shrink-0`}
+                  className={`${isInzan ? 'h-11 px-4 sm:px-5' : 'h-10 px-4'} font-bold shrink-0`}
                   onClick={() => {
                     handleScanSuccess(manualInputRef.current?.value || '');
                   }}
@@ -2146,8 +2179,9 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   </div>
                   <button
                     type="button"
+                    data-compact="true"
                     onClick={() => setLastCheckinDoneBanner(null)}
-                    className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
                     title="Dismiss"
                   >
                     ✕
@@ -2282,6 +2316,11 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                           </Badge>
                         ) : null;
                       })()}
+                      {(lastScannedMember as any)?._fromBackupSnapshot && (
+                        <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/35 text-[10px] font-bold">
+                          Cloud Backup Verification (Read-Only)
+                        </Badge>
+                      )}
                     </div>
                     <CardTitle className="text-2xl">
                       <button

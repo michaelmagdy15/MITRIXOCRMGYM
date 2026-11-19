@@ -4,9 +4,11 @@ import {
   __clearAllQuotaMetersForTests,
   getNextPacificMidnightIso,
   getPacificDateKey,
+  getQuotaAlertHistory,
   getQuotaStatus,
   isQuotaShieldActive,
   markQuotaExhausted,
+  onQuotaStateTransition,
   recordFirestoreReads,
   recordFirestoreWrites,
   resetQuotaShieldProbe,
@@ -71,4 +73,53 @@ test('sparkQuotaShield enforces state transitions, tenant isolation, and probe r
   const rolled = getQuotaStatus('inzanathletics', new Date('2026-11-20T08:05:00.000Z'));
   assert.equal(rolled.reads, 0);
   assert.equal(rolled.state, 'normal');
+});
+
+test('sparkQuotaShield emits non-duplicated state transition alerts and stores ring-buffer history', () => {
+  __clearAllQuotaMetersForTests();
+  const now = new Date('2026-11-19T14:00:00.000Z');
+  const received: Array<{ fromState: string; toState: string; tenantId: string }> = [];
+
+  const unsub = onQuotaStateTransition((alert) => {
+    received.push({ fromState: alert.fromState, toState: alert.toState, tenantId: alert.tenantId });
+  });
+
+  try {
+    // Sub-threshold reads produce no alerts
+    recordFirestoreReads('inzanathletics', 500, now);
+    assert.equal(received.length, 0);
+
+    // Crossing conserve fires once
+    recordFirestoreReads('inzanathletics', SPARK_CONSERVE_READ_THRESHOLD, now);
+    assert.equal(received.length, 1);
+    assert.deepEqual(received[0], {
+      fromState: 'normal',
+      toState: 'conserve',
+      tenantId: 'inzanathletics',
+    });
+
+    // Additional reads still inside conserve do NOT spam duplicate alerts
+    recordFirestoreReads('inzanathletics', 500, now);
+    assert.equal(received.length, 1);
+
+    // Crossing shield_active fires once
+    recordFirestoreReads('inzanathletics', SPARK_SHIELD_READ_THRESHOLD, now);
+    assert.equal(received.length, 2);
+    assert.deepEqual(received[1], {
+      fromState: 'conserve',
+      toState: 'shield_active',
+      tenantId: 'inzanathletics',
+    });
+
+    // Duplicate exhaustion latch while already in shield_active does NOT emit another alert
+    markQuotaExhausted('inzanathletics', 'Quota exceeded', now);
+    assert.equal(received.length, 2);
+
+    const history = getQuotaAlertHistory('inzanathletics', now);
+    assert.equal(history.length, 2);
+    assert.equal(history[0]?.toState, 'shield_active');
+    assert.equal(history[1]?.toState, 'conserve');
+  } finally {
+    unsub();
+  }
 });

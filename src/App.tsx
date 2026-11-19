@@ -154,6 +154,7 @@ interface HeaderSearchInputProps {
   setSearchQuery: (q: string) => void;
   onSubmitSearch: (q: string) => void;
   placeholder: string;
+  onOpenCommandPalette?: () => void;
 }
 
 const HeaderSearchInput: React.FC<HeaderSearchInputProps> = React.memo(({
@@ -161,6 +162,7 @@ const HeaderSearchInput: React.FC<HeaderSearchInputProps> = React.memo(({
   setSearchQuery,
   onSubmitSearch,
   placeholder,
+  onOpenCommandPalette,
 }) => {
   const [localInput, setLocalInput] = React.useState(searchQuery);
   const isDirtyRef = React.useRef(false);
@@ -188,7 +190,7 @@ const HeaderSearchInput: React.FC<HeaderSearchInputProps> = React.memo(({
       <Input
         type="search"
         placeholder={placeholder}
-        className="w-full ps-9 bg-muted/50 border-none"
+        className={`w-full ps-9 bg-muted/50 border-none ${onOpenCommandPalette && !localInput ? 'pe-12' : ''}`}
         value={localInput}
         onChange={(e) => {
           isDirtyRef.current = true;
@@ -202,6 +204,17 @@ const HeaderSearchInput: React.FC<HeaderSearchInputProps> = React.memo(({
           }
         }}
       />
+      {onOpenCommandPalette && !localInput && (
+        <button
+          type="button"
+          data-compact="true"
+          onClick={onOpenCommandPalette}
+          title="Quick Command Palette (Ctrl/Cmd + K)"
+          className="hidden lg:inline-flex items-center rounded border border-border/80 bg-background/85 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-muted-foreground hover:text-foreground transition-colors absolute end-2 top-1/2 -translate-y-1/2"
+        >
+          ⌘K
+        </button>
+      )}
     </div>
   );
 });
@@ -257,6 +270,8 @@ function AppContent() {
     state: 'conserve' | 'shield_active';
     nextResetIso?: string;
     reason?: string;
+    failoverActive?: boolean;
+    failoverBackupAt?: string;
     dismissed?: boolean;
   } | null>(null);
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
@@ -337,27 +352,46 @@ function AppContent() {
         const st = data?.status;
         if (!cancelled && st && (st.state === 'conserve' || st.state === 'shield_active')) {
           setQuotaBanner((prev) =>
-            prev && prev.dismissed && prev.state === st.state
+            prev && prev.dismissed && prev.state === st.state && !prev.failoverActive
               ? prev
               : {
                   state: st.state,
                   nextResetIso: st.nextResetIso,
                   reason: st.reason,
+                  failoverActive: prev?.failoverActive,
+                  failoverBackupAt: prev?.failoverBackupAt,
                   dismissed: false,
                 }
           );
         } else if (!cancelled && st?.state === 'normal') {
-          setQuotaBanner(null);
+          setQuotaBanner((prev) => (prev?.failoverActive ? prev : null));
         }
       } catch {
         // Ignore transient status fetch failure
       }
     };
+    const handleQuotaFailover = (event: Event) => {
+      const detail = (event as CustomEvent<{ active?: boolean; lastBackupAt?: string }>).detail;
+      if (detail?.active) {
+        setQuotaBanner((prev) => ({
+          state: 'shield_active',
+          nextResetIso: prev?.nextResetIso,
+          reason: prev?.reason,
+          failoverActive: true,
+          failoverBackupAt: detail.lastBackupAt,
+          dismissed: false,
+        }));
+      } else {
+        setQuotaBanner((prev) => (prev?.failoverActive ? null : prev));
+      }
+    };
+    window.addEventListener('mitrixo:quota-failover', handleQuotaFailover);
     void checkQuotaStatus();
     const timer = window.setInterval(checkQuotaStatus, 15 * 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      window.removeEventListener('mitrixo:quota-failover', handleQuotaFailover);
     };
   }, [currentUser?.id, effectiveRole]);
 
@@ -1208,9 +1242,17 @@ function AppContent() {
     return 'MANAGEMENT';
   };
 
+  const pinnedBottomNavIds = ['dashboard', 'attendance', 'clients', 'payments'];
+  const mobilePinnedNavItems = pinnedBottomNavIds
+    .map((id) => visibleNavItems.find((item) => item.id === id))
+    .filter((item): item is (typeof visibleNavItems)[number] => Boolean(item));
+  const pinnedNavIdSet = new Set(mobilePinnedNavItems.map((i) => i.id));
+  const hasDrawerAlerts = visibleNavItems.some(
+    (item) => !pinnedNavIdSet.has(item.id) && (notificationTabCounts[item.id] || 0) > 0
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans overflow-x-hidden">
-      <OfflineBanner />
       {/* Floating Exit Preview Banner — ALWAYS visible when preview is active */}
       {previewRole && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-bottom-4 duration-300">
@@ -1271,14 +1313,14 @@ function AppContent() {
             )}
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
+          <nav className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar">
             {NAV_SECTIONS.map((sec, secIdx) => {
               const sectionItems = visibleNavItems.filter(item => getNavSection(item.id) === sec.id);
               if (sectionItems.length === 0) return null;
               return (
                 <div key={sec.id} className="space-y-1">
                   {!isSidebarCollapsed ? (
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-2 pb-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-1 pb-0.5">
                       {sec.label}
                     </div>
                   ) : (
@@ -1292,10 +1334,10 @@ function AppContent() {
                       <button
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
-                        className={`flex items-center rounded-xl transition-all duration-200 text-left w-full h-11 px-3 relative border active:scale-[0.98] ${
+                        className={`flex items-center rounded-xl transition-all duration-200 text-left w-full h-10 px-3 relative border active:scale-[0.98] ${
                           isActive 
-                            ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
-                            : 'bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border-border/60 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800/60'
+                            ? 'bg-primary text-primary-foreground font-semibold shadow-sm border-transparent' 
+                            : 'bg-transparent border-transparent text-muted-foreground hover:bg-muted/65 hover:text-foreground dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white'
                         } ${isSidebarCollapsed ? 'justify-center' : ''}`}
                         title={isSidebarCollapsed ? item.label : undefined}
                       >
@@ -1422,13 +1464,13 @@ function AppContent() {
             </Button>
           </div>
 
-          <nav className="flex-1 overflow-y-auto space-y-2 no-scrollbar mb-4">
+          <nav className="flex-1 overflow-y-auto space-y-3 no-scrollbar mb-4">
             {NAV_SECTIONS.map(sec => {
               const sectionItems = visibleNavItems.filter(item => getNavSection(item.id) === sec.id);
               if (sectionItems.length === 0) return null;
               return (
-                <div key={sec.id} className="space-y-1.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-2 pb-0.5">
+                <div key={sec.id} className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-1.5 pb-0.5">
                     {sec.label}
                   </div>
                   {sectionItems.map(item => {
@@ -1442,10 +1484,10 @@ function AppContent() {
                           setActiveTab(item.id);
                           setIsMobileSidebarOpen(false);
                         }}
-                        className={`flex items-center gap-3 rounded-xl transition-all duration-200 text-left w-full h-11 px-3 border active:scale-[0.98] ${
+                        className={`flex items-center gap-3 rounded-xl transition-all duration-200 text-left w-full h-10 px-3 border active:scale-[0.98] ${
                           isActive 
-                            ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
-                            : 'bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border-border/60 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800/60'
+                            ? 'bg-primary text-primary-foreground font-semibold shadow-sm border-transparent' 
+                            : 'bg-transparent border-transparent text-muted-foreground hover:bg-muted/65 hover:text-foreground dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white'
                         }`}
                       >
                         <Icon className="h-5 w-5 flex-shrink-0" />
@@ -1488,6 +1530,13 @@ function AppContent() {
               </div>
             </div>
             <div className="flex flex-col gap-2 pt-2 border-t mt-2">
+              {isInzan && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser.role) && (
+                <div className="sm:hidden">
+                  <React.Suspense fallback={null}>
+                    <RedgitsLiveSyncDialog variant="button" />
+                  </React.Suspense>
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <Button variant="outline" size="sm" onClick={toggleTheme} disabled={themeLocked} className="flex-1 me-2 gap-2 h-9">
@@ -1520,12 +1569,12 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           {/* Header */}
           <header className="relative z-30 border-b bg-card/95 backdrop-blur-xl shadow-sm flex items-center justify-between px-3 sm:px-6 flex-shrink-0 pt-[var(--safe-top)] ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))] min-h-[calc(3.75rem+var(--safe-top))]">
-            <div className="flex items-center space-x-4 flex-1">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
               {/* Hamburger button on mobile */}
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="md:hidden" 
+                className="md:hidden shrink-0" 
                 onClick={() => setIsMobileSidebarOpen(true)}
                 title="Open menu"
               >
@@ -1534,19 +1583,19 @@ function AppContent() {
               
               {/* Show branding on mobile header only */}
               <div 
-                className="md:hidden flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity"
+                className="md:hidden flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity min-w-0"
                 onClick={() => setActiveTab('dashboard')}
               >
                 {branding.logoUrl && !logoLoadFailed ? (
                   <img 
                     src={branding.logoUrl} 
                     alt={branding.companyName} 
-                    className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
+                    className={`h-7 max-w-[148px] w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                     referrerPolicy="no-referrer"
                     onError={() => setLogoLoadFailed(true)}
                   />
                 ) : (
-                  <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">
+                  <h1 className="text-base font-logo tracking-[0.08em] uppercase text-primary font-bold truncate">
                     {branding.companyName}
                   </h1>
                 )}
@@ -1559,6 +1608,7 @@ function AppContent() {
                   setSearchQuery={setSearchQuery}
                   onSubmitSearch={triggerHeaderSearchSubmit}
                   placeholder={t('header.search_placeholder')}
+                  onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
                 />
               </div>
 
@@ -1588,11 +1638,13 @@ function AppContent() {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-3 ms-auto">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 ms-auto shrink-0">
               {isInzan && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser.role) && (
-                <React.Suspense fallback={null}>
-                  <RedgitsLiveSyncDialog variant="header" />
-                </React.Suspense>
+                <div className="hidden sm:flex">
+                  <React.Suspense fallback={null}>
+                    <RedgitsLiveSyncDialog variant="header" />
+                  </React.Suspense>
+                </div>
               )}
 
               {/* Search trigger on mobile */}
@@ -1605,14 +1657,14 @@ function AppContent() {
                 </Button>
               </div>
 
-              {/* Quick Theme Toggle (Header) */}
+              {/* Quick Theme Toggle (Desktop Header; Mobile lives in Drawer) */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleTheme}
                 disabled={themeLocked}
                 title={theme === 'dark' ? t('common.light_mode') : t('common.dark_mode')}
-                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                className="hidden md:inline-flex h-9 w-9 text-muted-foreground hover:text-foreground"
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4 sm:h-5 sm:w-5" /> : <Moon className="h-4 w-4 sm:h-5 sm:w-5" />}
               </Button>
@@ -1665,6 +1717,9 @@ function AppContent() {
             </div>
           )}
 
+          {/* Notification bar / mobile prompt scoped cleanly inside main pane */}
+          <NotificationEnforcementGate />
+
           {/* Mobile search bar if toggled */}
           <div id="mobile-search" className="hidden md:hidden bg-card border-b p-2 flex-shrink-0">
             <HeaderSearchInput
@@ -1676,7 +1731,7 @@ function AppContent() {
           </div>
 
           {/* Main scrollable viewport */}
-          <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0 pb-[max(1rem,var(--safe-bottom))] ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))]">
+          <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0 pb-[calc(5.25rem+var(--safe-bottom))] md:pb-8 ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))]">
             {quotaBanner && !quotaBanner.dismissed && (
               <div
                 className={`mb-4 rounded-xl border px-4 py-2.5 flex items-center justify-between gap-3 text-xs ${
@@ -1688,7 +1743,9 @@ function AppContent() {
                 <div className="flex items-center gap-2 min-w-0">
                   <ShieldAlert className="h-4 w-4 shrink-0" />
                   <span className="font-medium truncate">
-                    {quotaBanner.state === 'shield_active'
+                    {quotaBanner.failoverActive
+                      ? 'Read-Only Cloud Backup Snapshot Active: showing verified backup member records until daily Spark reset'
+                      : quotaBanner.state === 'shield_active'
                       ? 'Quota Shield Active: non-essential background sync paused & cached backups active until daily Spark reset'
                       : 'Conserve Mode: background crons paused to protect daily Spark quota'}
                     {quotaBanner.nextResetIso
@@ -1699,6 +1756,7 @@ function AppContent() {
                 </div>
                 <button
                   type="button"
+                  data-compact="true"
                   onClick={() => setQuotaBanner((prev) => (prev ? { ...prev, dismissed: true } : null))}
                   className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 shrink-0"
                   title="Dismiss"
@@ -1950,6 +2008,51 @@ function AppContent() {
         </div>
       </div>
 
+      {/* Mobile Quick-Access Bottom Navigation Bar */}
+      <nav
+        aria-label="Mobile quick navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-card/95 backdrop-blur-xl px-2 pt-1.5 pb-[max(0.5rem,var(--safe-bottom))] flex items-center justify-around gap-1 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)]"
+      >
+        {mobilePinnedNavItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          const badgeCount = notificationTabCounts[item.id] || 0;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              className={`relative flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-semibold transition-colors ${
+                isActive
+                  ? 'text-primary bg-primary/10'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <div className="relative">
+                <Icon className="h-4 w-4" />
+                {badgeCount > 0 && (
+                  <span className="absolute -top-1 -right-2 h-2 w-2 rounded-full bg-destructive" />
+                )}
+              </div>
+              <span className="truncate max-w-full">{item.label}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="relative flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <div className="relative">
+            <Menu className="h-4 w-4" />
+            {hasDrawerAlerts && (
+              <span className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-destructive" />
+            )}
+          </div>
+          <span>Menu</span>
+        </button>
+      </nav>
+
       {/* Global Search Fallback Dialog */}
       <Dialog open={searchFallbackOpen} onOpenChange={setSearchFallbackOpen}>
         <DialogContent className="sm:max-w-md border-border/80 bg-card backdrop-blur-xl">
@@ -2052,7 +2155,6 @@ export default function App() {
                     <TenantInitWrapper>
                       <OfflineBanner />
                       <SmartPWAInstallGate />
-                      <NotificationEnforcementGate />
                       <NotificationsProvider>
                         <AppContent />
                       </NotificationsProvider>

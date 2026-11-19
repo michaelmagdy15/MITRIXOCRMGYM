@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BellRing, Share, PlusSquare, CheckCircle2, Volume2, Smartphone, AlertCircle } from 'lucide-react';
+import { BellRing, Share, PlusSquare, CheckCircle2, Volume2, Smartphone, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +26,22 @@ export function NotificationEnforcementGate() {
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isRequesting, setIsRequesting] = useState<boolean>(false);
   const [minimizedToBanner, setMinimizedToBanner] = useState<boolean>(false);
+  const [dismissedForSession, setDismissedForSession] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('mitrixo_notif_gate_dismissed_v1') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissForSession = () => {
+    try {
+      sessionStorage.setItem('mitrixo_notif_gate_dismissed_v1', '1');
+    } catch {
+      // ignore storage failure
+    }
+    setDismissedForSession(true);
+  };
 
   const tenantId = getTenantId();
   const brandName =
@@ -76,8 +92,8 @@ export function NotificationEnforcementGate() {
     if (/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent || '')) return null;
   }
 
-  // Once permission is granted, hide the enforcement gate completely
-  if (permission === 'granted') {
+  // Once permission is granted (or dismissed for this session), hide cleanly
+  if (permission === 'granted' || dismissedForSession) {
     return null;
   }
 
@@ -159,6 +175,14 @@ export function NotificationEnforcementGate() {
                   <Volume2 className="h-4 w-4" />
                   Activate Live Sound &amp; In-App Alerts Now
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleDismissForSession}
+                  className="w-full h-9 text-xs text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Maybe Later
+                </Button>
               </div>
             ) : permission === 'denied' ? (
               <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 space-y-2">
@@ -189,6 +213,14 @@ export function NotificationEnforcementGate() {
                     Use Sound Alerts Only
                   </Button>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleDismissForSession}
+                  className="w-full h-9 text-xs text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Maybe Later
+                </Button>
               </div>
             ) : (
               <div className="space-y-2.5 pt-1">
@@ -201,6 +233,14 @@ export function NotificationEnforcementGate() {
                   <BellRing className="h-4 w-4" />
                   {isRequesting ? 'Requesting Permission...' : 'Tap to Enable Notifications & Sound'}
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleDismissForSession}
+                  className="w-full h-9 text-xs text-muted-foreground hover:text-foreground rounded-xl"
+                >
+                  Maybe Later
+                </Button>
               </div>
             )}
           </div>
@@ -209,45 +249,55 @@ export function NotificationEnforcementGate() {
     );
   }
 
-  // Persistent Top Bar on Desktop Browsers (or minimized mobile state) until granted
+  // Sleek, dismissible Top Bar on Desktop Browsers (or minimized mobile state) until granted
   return (
-    <div className="w-full bg-gradient-to-r from-emerald-50 via-white to-emerald-50 dark:from-emerald-950/90 dark:via-zinc-900 dark:to-emerald-950/90 border-b border-emerald-500/30 px-3 py-2 text-xs text-emerald-950 dark:text-white flex flex-wrap items-center justify-between gap-2 z-50">
+    <div className="w-full bg-card/95 border-b border-border/70 px-3 sm:px-6 py-2 text-xs text-foreground flex flex-wrap items-center justify-between gap-2 z-20 flex-shrink-0">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="h-6 w-6 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-          <BellRing className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
-        </span>
-        <span className="font-semibold truncate">
+        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+        <span className="font-medium truncate text-muted-foreground">
           {iosNeedsHomeScreen
-            ? `iPhone Tip: Tap Share → "Add to Home Screen" for lock-screen push. Live sound ping is active!`
-            : `Enable ${brandName} instant browser notifications & audible sound pings so you never miss an alert.`}
+            ? `iPhone Tip: Tap Share → "Add to Home Screen" for lock-screen push alerts.`
+            : `Turn on ${brandName} alerts & sound pings so reception never misses an update.`}
         </span>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         {!iosNeedsHomeScreen && permission !== 'unsupported' && (
           <Button
             type="button"
             size="sm"
+            data-compact="true"
             disabled={isRequesting}
             onClick={handleEnableClick}
-            className="h-7 px-3 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg gap-1.5"
+            className="h-7 px-2.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg gap-1.5"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {permission === 'denied' ? 'Unblock Alerts' : 'Enable Notifications & Sound'}
+            {permission === 'denied' ? 'Unblock Alerts' : 'Enable Alerts'}
           </Button>
         )}
         <Button
           type="button"
           size="sm"
           variant="outline"
+          data-compact="true"
           onClick={() => {
             playBrowserNotificationPing('default');
             toast.success('Notification sound ping tested & active!');
           }}
-          className="h-7 px-2.5 text-[11px] border-emerald-600/30 dark:border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 rounded-lg gap-1"
+          className="h-7 px-2.5 text-[11px] rounded-lg gap-1"
         >
           <Volume2 className="h-3 w-3" />
           Test Ping
         </Button>
+        <button
+          type="button"
+          data-compact="true"
+          onClick={handleDismissForSession}
+          aria-label="Dismiss notification bar"
+          title="Dismiss for this session"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
   );

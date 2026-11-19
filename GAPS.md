@@ -1,6 +1,28 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-10-20 (Platform Security & Production Rules Deploy)
+Updated: 2026-11-19 (Spark Quota Shield Failover, Cloudflare KV Historical Archive, Edge Uptime Monitor & UI/UX Polish)
+
+## RECENT WORK - 2026-11-19 (RELIABILITY.SHIELD.1 / ARCHIVE.KV.1 / EDGE.MONITOR.1 / UX.POLISH.1)
+
+- **Spark Quota Shield Failover & Transition Alerting (`src/utils/backupFailover.ts`, `src/hooks/useClients.ts`, `src/Attendance.tsx`, `src/utils/sparkQuotaShield.ts`, `server.ts`)**:
+  - Added automatic read-only front-desk failover to `/api/quota/backup-snapshot` + IndexedDB hydration when live `clients`/`leads`/`search` queries hit `RESOURCE_EXHAUSTED`, plus check-in verification fallback with a `"Cloud Backup Verification (Read-Only)"` badge.
+  - Added state-transition alerting (`onQuotaStateTransition`, ring-buffer `getQuotaAlertHistory`) wired in `server.ts` for structured warnings and optional `QUOTA_ALERT_WEBHOOK_URL` / `BREVO_API_KEY` notifications.
+- **Cloudflare KV Historical Archive & Selective Operational Trickle (`scripts/upload-inzan-archive.mjs`, `scripts/run-inzan-trickle.mjs`, `src/services/historicalArchiveService.ts`, `src/components/HistoricalArchiveBrowser.tsx`, `src/components/InzanMemberShow.tsx`)**:
+  - Archived all 159,794 remaining historical records (`92,547` `attendance_history`, `29,465` `attendance`, `25,224` `leads`, `8,167` `invitations`, `4,391` `callCenterLog`) into Cloudflare KV so legacy history renders with **0** Firestore reads/writes.
+  - Added `--recent-only` to `scripts/run-inzan-trickle.mjs` to promote only recent Sept–Nov 2026 operational records (~3,316 docs) into live Spark Firestore.
+  - Gated `clients/*/attendance_history` snapshot subscription in `InzanMemberShow.tsx` until the `Activity` tab opens, merged archived visits with 50-row pagination, and added `HistoricalArchiveBrowser` in `Settings → Backup Station` (auto-hidden when a tenant has no archive).
+- **Zero-API-Key Edge Uptime & Quota Monitor (`cloudflare/mitrixo-edge-router/`, `src/components/QuotaShieldCard.tsx`)**:
+  - Added `QUOTA_BACKUPS` KV probing every 10 minutes inside the active Cairo window (`04:00–22:59 UTC`) across Inzan Gateway, Strike Production, and VBT Portal with a 24-check rolling window (`monitor:health:latest`) plus self-healing gateway refresh fallback in `getOrRefreshEdgeMonitorHealth()`, displayed directly inside `QuotaShieldCard`.
+- **Mobile & Desktop UI/UX Polish (`src/App.tsx`, `src/components/NotificationEnforcementGate.tsx`, `src/index.css`, `src/Login.tsx`, `src/Clients.tsx`, `src/Attendance.tsx`)**:
+  - Removed duplicate `OfflineBanner`, moved `NotificationEnforcementGate` cleanly into the CRM right pane with session dismissibility (`"Maybe Later"` / `X`) and tenant-neutral desktop bar, de-cluttered mobile headers, added a mobile quick-access bottom navigation bar (`md:hidden`) + desktop `⌘K` search hint, calmed inactive sidebar row styling, opted out static cards from blanket hover jitter (`.interactive-card`), refined touch targets for compact inline buttons, and stacked mobile member search inputs cleanly.
+- **Strike Asset & Latency Hardening (Previous Same-Day Deployments `d6947f8` / `e681c09` / `db55cae`)**:
+  - Fixed Strike `strike-production-f5242` Storage asset references, forced SW cache resets (`strike_clean_v18_live` / `inzan_spark_v23_live`), and provisioned Render + Cloudflare Workers KV `MITRIXO_QUOTA_BACKUPS` (`$0/mo` Stack).
+- **Remaining Optional / External-Key Items**:
+  - `BREVO_API_KEY` + `QUOTA_ALERT_EMAIL` (for transactional emails & Quota Shield email alerts, `$0/mo` Brevo Free tier).
+  - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (to offload uploaded media/contracts out of Firestore `media_assets` `1 GiB` Spark storage).
+  - Android Play Console store submission (`eas submit`) & Phase 2 migration of non-CRM GCP projects listed in the zero-cost design doc.
+
+---
 
 ## RECENT WORK - 2026-10-20 (AUDIT.SECURITY.1 & DEPLOY.RULES.1)
 

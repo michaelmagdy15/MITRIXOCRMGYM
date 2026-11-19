@@ -1,3 +1,121 @@
+async function probeTarget(url, init = {}) {
+  const startedAt = Date.now();
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(10000),
+    });
+    const latencyMs = Date.now() - startedAt;
+    let body = null;
+    if (init.parseJson) {
+      body = await res.json().catch(() => null);
+    }
+    return {
+      ok: res.ok,
+      status: res.status,
+      latencyMs,
+      body,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      latencyMs: Date.now() - startedAt,
+      error: err instanceof Error ? err.message : String(err),
+      body: null,
+    };
+  }
+}
+
+async function runEdgeMonitor(env, gatewayOrigin, nowIso) {
+  if (!env.QUOTA_BACKUPS) return;
+
+  const [inzanGateway, inzanQuota, strikeProduction, vbtPortal, prevRaw] = await Promise.all([
+    probeTarget(`${gatewayOrigin}/api/health`, {
+      headers: { 'User-Agent': 'Mitrixo-Edge-Monitor/1.0' },
+    }),
+    probeTarget(`${gatewayOrigin}/api/quota/status`, {
+      parseJson: true,
+      headers: {
+        'User-Agent': 'Mitrixo-Edge-Monitor/1.0',
+        'x-tenant-id': 'inzanathletics',
+      },
+    }),
+    probeTarget('https://strike-egy.com/api/health', {
+      headers: { 'User-Agent': 'Mitrixo-Edge-Monitor/1.0' },
+    }),
+    probeTarget('https://vbt.mitrixo.com/', {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Mitrixo-Edge-Monitor/1.0' },
+    }),
+    env.QUOTA_BACKUPS.get('monitor:health:latest', 'json').catch(() => null),
+  ]);
+
+  const quotaState = inzanQuota.body?.status?.state || 'unknown';
+  const readPercent = Number(inzanQuota.body?.status?.readPercent ?? 0);
+  const reads = Number(inzanQuota.body?.status?.reads ?? 0);
+  const readLimit = Number(inzanQuota.body?.status?.readLimit ?? 50000);
+  const overallOk = Boolean(inzanGateway.ok && inzanQuota.ok && strikeProduction.ok && vbtPortal.ok);
+
+  const prevHistory = Array.isArray(prevRaw?.history) ? prevRaw.history : [];
+  const nextHistory = [
+    ...prevHistory.slice(-23),
+    {
+      t: nowIso,
+      ok: overallOk,
+      inzanMs: inzanGateway.latencyMs,
+      strikeMs: strikeProduction.latencyMs,
+      vbtMs: vbtPortal.latencyMs,
+      quotaState,
+    },
+  ];
+
+  const report = {
+    checkedAt: nowIso,
+    overallOk,
+    checks: {
+      inzanGateway: {
+        ok: inzanGateway.ok,
+        status: inzanGateway.status,
+        latencyMs: inzanGateway.latencyMs,
+        ...(inzanGateway.error ? { error: inzanGateway.error } : {}),
+      },
+      inzanQuota: {
+        ok: inzanQuota.ok,
+        status: inzanQuota.status,
+        latencyMs: inzanQuota.latencyMs,
+        quotaState,
+        readPercent,
+        reads,
+        readLimit,
+        ...(inzanQuota.error ? { error: inzanQuota.error } : {}),
+      },
+      strikeProduction: {
+        ok: strikeProduction.ok,
+        status: strikeProduction.status,
+        latencyMs: strikeProduction.latencyMs,
+        ...(strikeProduction.error ? { error: strikeProduction.error } : {}),
+      },
+      vbtPortal: {
+        ok: vbtPortal.ok,
+        status: vbtPortal.status,
+        latencyMs: vbtPortal.latencyMs,
+        ...(vbtPortal.error ? { error: vbtPortal.error } : {}),
+      },
+    },
+    history: nextHistory,
+  };
+
+  if (!overallOk || (quotaState !== 'normal' && quotaState !== 'unknown')) {
+    console.warn(
+      '[EDGE-MONITOR-ALERT]',
+      JSON.stringify({ checkedAt: nowIso, overallOk, quotaState, checks: report.checks })
+    );
+  }
+
+  await env.QUOTA_BACKUPS.put('monitor:health:latest', JSON.stringify(report));
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -61,6 +179,9 @@ export default {
           headers: { 'User-Agent': 'Mitrixo-Edge-KeepWarm/1.0' },
         }).catch(() => {})
       );
+      if (utcMin % 10 === 0) {
+        ctx.waitUntil(runEdgeMonitor(env, gatewayOrigin, dt.toISOString()).catch(() => {}));
+      }
       if (utcMin % 20 === 0) {
         ctx.waitUntil(
           fetch(`${gatewayOrigin}/api/cron/no-show-check`, {

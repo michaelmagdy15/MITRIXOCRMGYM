@@ -29,7 +29,7 @@ const AUTH_TABS_LIST_BASE =
   'grid w-full group-data-horizontal/tabs:h-auto items-stretch gap-1 rounded-xl bg-muted/70 dark:bg-[#131315] p-1.5 ring-1 ring-border/60';
 
 const AUTH_TAB_TRIGGER_CLASS =
-  'h-full min-h-[40px] w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 py-2 text-xs sm:text-[13px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground transition-all after:hidden data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:data-active:bg-[#2b2b30] dark:data-active:text-foreground dark:data-active:border-[#4a4a52]/70';
+  'h-full min-h-[40px] w-full min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg px-2 py-2 text-xs sm:text-[13px] font-medium whitespace-nowrap truncate border border-transparent text-muted-foreground hover:text-foreground transition-all after:hidden data-active:bg-background data-active:text-foreground data-active:shadow-sm data-active:border-border/70 dark:data-active:bg-[#2b2b30] dark:data-active:text-foreground dark:data-active:border-[#4a4a52]/80';
 
 
 interface LoginProps {

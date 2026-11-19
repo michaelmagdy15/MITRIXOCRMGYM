@@ -33,6 +33,14 @@ import {
   getMemberById,
 } from '../services/localDb';
 import { enqueueOperation } from '../services/outbox';
+import { isFirestoreQuotaOrUnavailableError } from '../utils/firestoreQuota';
+import {
+  dispatchQuotaFailoverEvent,
+  fetchTenantBackupSnapshot,
+  hydrateBackupClientsToLocalDb,
+  mergeBackupClients,
+  searchBackupClients,
+} from '../utils/backupFailover';
 
 function isNetworkOrOfflineError(error: any): boolean {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
@@ -213,12 +221,52 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const leadsListRef = useRef(leadsList);
   const searchResultsRef = useRef(searchResults);
   const hasHydratedLocalMembersRef = useRef(false);
+  const backupFailoverActiveRef = useRef(false);
+  const backupClientsCacheRef = useRef<any[]>([]);
   currentUserRef.current = currentUser;
   baseClientsRef.current = baseClients;
   membersListRef.current = membersList;
   expiredMembersListRef.current = expiredMembersList;
   leadsListRef.current = leadsList;
   searchResultsRef.current = searchResults;
+
+  const engageQuotaFailover = useCallback(async () => {
+    const tid = getTenantId();
+    if (!tid) return [];
+    const snap = await fetchTenantBackupSnapshot(tid);
+    const backupClients = snap?.collections?.clients
+      ? (Object.values(snap.collections.clients) as any[])
+      : [];
+    if (backupClients.length === 0) return [];
+
+    backupFailoverActiveRef.current = true;
+    backupClientsCacheRef.current = backupClients;
+    void hydrateBackupClientsToLocalDb(tid, backupClients);
+
+    const nonLeads = backupClients.filter(
+      (c) => String(c?.status || '').toLowerCase() !== 'lead' && !c?.isDeleted
+    );
+    const leads = backupClients.filter(
+      (c) => String(c?.status || '').toLowerCase() === 'lead' && !c?.isDeleted
+    );
+
+    if (nonLeads.length > 0) {
+      setMembersList((prev) =>
+        mergeBackupClients(prev as any[], nonLeads) as Omit<Client, 'comments' | 'interactions'>[]
+      );
+    }
+    if (leads.length > 0) {
+      setLeadsList((prev) =>
+        mergeBackupClients(prev as any[], leads) as Omit<Client, 'comments' | 'interactions'>[]
+      );
+    }
+    dispatchQuotaFailoverEvent({
+      active: true,
+      lastBackupAt: snap?.lastBackupAt,
+      count: backupClients.length,
+    });
+    return backupClients;
+  }, []);
 
 
 
@@ -264,6 +312,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     const unsubClients = onSnapshot(
       q,
       (snapshot) => {
+        if (backupFailoverActiveRef.current) {
+          backupFailoverActiveRef.current = false;
+          dispatchQuotaFailoverEvent({ active: false });
+        }
         const fetched = snapshot.docs.map(
           (d) => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>)
         );
@@ -297,6 +349,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       },
       (error) => {
+        if (isFirestoreQuotaOrUnavailableError(error)) {
+          void engageQuotaFailover();
+        }
         handleFirestoreError(error, OperationType.LIST, 'clients-members');
         setLoading(false);
       }
@@ -306,7 +361,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       unsubClients();
       if (hydrationTimer) clearTimeout(hydrationTimer);
     };
-  }, [currentUser?.id, currentUser?.role, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, engageQuotaFailover]);
 
   const [loadingExpired, setLoadingExpired] = useState(false);
   const [expiredLoaded, setExpiredLoaded] = useState(false);
@@ -383,12 +438,15 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         );
       },
       (error) => {
+        if (isFirestoreQuotaOrUnavailableError(error)) {
+          void engageQuotaFailover();
+        }
         handleFirestoreError(error, OperationType.LIST, 'clients-leads');
       }
     );
 
     return () => unsubLeads();
-  }, [currentUser?.id, currentUser?.role, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, engageQuotaFailover]);
 
   // 3. On-demand search query for historical/lost leads & ID lookups
   useEffect(() => {
@@ -566,17 +624,39 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
 
         // Query by name prefix match (capitalized prefix logic)
+        let quotaHitDuringSearch = false;
         if (term.length >= 2 && !/^\d+$/.test(cleanIdTerm)) {
-          const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
-          const qName = query(
-            collection(db, 'clients'),
-            orderBy('name'),
-            startAt(capitalizedTerm),
-            endAt(capitalizedTerm + '\uf8ff'),
-            limit(30)
-          );
-          const nameSnap = await getDocs(qName);
-          if (active) nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          try {
+            const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
+            const qName = query(
+              collection(db, 'clients'),
+              orderBy('name'),
+              startAt(capitalizedTerm),
+              endAt(capitalizedTerm + '\uf8ff'),
+              limit(30)
+            );
+            const nameSnap = await getDocs(qName);
+            if (active) nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch (nameErr) {
+            if (isFirestoreQuotaOrUnavailableError(nameErr)) {
+              quotaHitDuringSearch = true;
+            }
+          }
+        }
+
+        if (active && (quotaHitDuringSearch || (resultsMap.size === 0 && backupFailoverActiveRef.current))) {
+          const pool =
+            backupClientsCacheRef.current.length > 0
+              ? backupClientsCacheRef.current
+              : await engageQuotaFailover();
+          if (active && pool.length > 0) {
+            const backupMatches = searchBackupClients(pool, term, 40);
+            backupMatches.forEach((m) => {
+              if (!resultsMap.has(m.id)) {
+                resultsMap.set(m.id, m);
+              }
+            });
+          }
         }
 
         if (active) {
@@ -588,6 +668,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           );
         }
       } catch (error) {
+        if (isFirestoreQuotaOrUnavailableError(error)) {
+          const pool = await engageQuotaFailover();
+          if (active && pool.length > 0) {
+            setSearchResults(searchBackupClients(pool, term, 40) as Omit<Client, 'comments' | 'interactions'>[]);
+          }
+        }
         console.error('Error running on-demand search:', error);
       }
     }, 300);
@@ -596,7 +682,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       active = false;
       clearTimeout(delayDebounce);
     };
-  }, [currentUser?.id, currentUser?.role, effectiveRole, searchTerm]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, searchTerm, engageQuotaFailover]);
 
   const fetchClientDetails = useCallback(async (clientId: string) => {
     try {
