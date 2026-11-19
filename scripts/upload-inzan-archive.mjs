@@ -61,6 +61,7 @@ function parseArgs(argv) {
   }
   return {
     dryRun: argv.includes('--dry-run'),
+    forceWrangler: argv.includes('--wrangler'),
     gatewayUrl,
   };
 }
@@ -92,25 +93,29 @@ function putKvKeyViaWrangler(bucket, buf) {
     const nodeOpts = existingNodeOpts.includes('ipv4_dns.cjs')
       ? existingNodeOpts
       : `--require ${IPV4_PRELOAD}`;
-    execFileSync(
-      process.execPath,
-      [
-        WRANGLER_JS,
-        'kv',
-        'key',
-        'put',
-        key,
-        '--namespace-id',
-        KV_NAMESPACE_ID,
-        '--remote',
-        '--path',
-        tmpFile,
-      ],
-      {
+    const kvArgs = [
+      'kv',
+      'key',
+      'put',
+      key,
+      '--namespace-id',
+      KV_NAMESPACE_ID,
+      '--remote',
+      '--path',
+      tmpFile,
+    ];
+    if (fs.existsSync(WRANGLER_JS)) {
+      execFileSync(process.execPath, [WRANGLER_JS, ...kvArgs], {
         stdio: 'inherit',
         env: { ...process.env, NODE_OPTIONS: nodeOpts },
-      }
-    );
+      });
+    } else {
+      execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['wrangler', ...kvArgs], {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+        env: { ...process.env, NODE_OPTIONS: nodeOpts },
+      });
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -291,7 +296,7 @@ async function main() {
     ['meta', Buffer.from(JSON.stringify(meta), 'utf8')],
   ];
 
-  const useWrangler = Boolean(process.env.CLOUDFLARE_API_TOKEN) && fs.existsSync(WRANGLER_JS);
+  const useWrangler = opts.forceWrangler || (Boolean(process.env.CLOUDFLARE_API_TOKEN) && fs.existsSync(WRANGLER_JS));
   if (useWrangler) {
     console.log('[ARCHIVE] Uploading 6 payloads directly via Wrangler KV...');
     for (const [bucket, buf] of buckets) {
