@@ -144,6 +144,8 @@ export async function searchMembersLocal(tenantId: string, searchTerm: string): 
   if (!rawTerm) return [];
 
   const lowerTerm = rawTerm.toLowerCase();
+  const compactTerm = lowerTerm.replace(/\s|-/g, '');
+  const hasLetters = /[a-z]/i.test(rawTerm);
   const digitsOnly = rawTerm.replace(/\D/g, '');
   const db = await getLocalDb(tenantId);
 
@@ -159,16 +161,28 @@ export async function searchMembersLocal(tenantId: string, searchTerm: string): 
     if (!m) return false;
     const id = m.id ? String(m.id).toLowerCase() : '';
     const memberId = m.memberId ? String(m.memberId).toLowerCase() : '';
+    const barcode = m.barcode ? String(m.barcode).replace(/^#/, '').toLowerCase().trim() : '';
     const name = m.name ? String(m.name).toLowerCase() : '';
     const phone = m.phone ? String(m.phone) : '';
     const normPhone = m.normalizedPhone ? String(m.normalizedPhone) : '';
 
     if (id === lowerTerm) return true;
     if (memberId && memberId.includes(lowerTerm)) return true;
+    if (barcode && (barcode === lowerTerm || barcode.replace(/\s|-/g, '') === compactTerm)) return true;
+    if (
+      Array.isArray(m.secondaryBarcodes) &&
+      m.secondaryBarcodes.some((b: unknown) => {
+        const s = String(b ?? '').replace(/^#/, '').toLowerCase().trim();
+        return Boolean(s) && (s === lowerTerm || s.replace(/\s|-/g, '') === compactTerm);
+      })
+    ) {
+      return true;
+    }
     if (name && name.includes(lowerTerm)) return true;
     if (phone && phone.includes(rawTerm)) return true;
-    if (digitsOnly && normPhone && normPhone.includes(digitsOnly)) return true;
-    if (digitsOnly && phone && phone.replace(/\D/g, '').includes(digitsOnly)) return true;
+    // Guard against alphanumeric member codes like "P20" matching "+20" country phone prefixes
+    if (!hasLetters && digitsOnly.length >= 4 && normPhone && normPhone.includes(digitsOnly)) return true;
+    if (!hasLetters && digitsOnly.length >= 4 && phone && phone.replace(/\D/g, '').includes(digitsOnly)) return true;
 
     return false;
   });

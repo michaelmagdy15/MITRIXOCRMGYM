@@ -103,3 +103,29 @@ test('historicalArchiveService filters archive arrays and deduplicates merged me
   assert.equal(merged[2]?.id, 'h2');
   assert.equal(merged.every((r) => r.isArchived === true), true);
 });
+
+test('findMemberInBackupClients strictly resolves P20 without false-matching +20 phone prefixes', () => {
+  const appleReviewer = {
+    id: 'app-rev-1',
+    name: 'Apple Reviewer',
+    memberId: 'MEM-APP-REV',
+    phone: '+201000000001',
+    normalizedPhone: '201000000001',
+    status: 'Active',
+  };
+  const ahmedKassem = {
+    id: 'inzan-p20',
+    name: 'Ahmed Kassem',
+    memberId: 'P20',
+    phone: '01099887766',
+    status: 'Expired',
+  };
+
+  const withP20 = findMemberInBackupClients([appleReviewer, ahmedKassem], 'P20');
+  assert.equal(withP20?.id, 'inzan-p20');
+  assert.equal(withP20?.name, 'Ahmed Kassem');
+
+  // When P20 is absent, +20 phone numbers must not be falsely returned for "P20"
+  const withoutP20 = findMemberInBackupClients([appleReviewer], 'P20');
+  assert.equal(withoutP20, null);
+});

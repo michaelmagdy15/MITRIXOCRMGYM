@@ -410,9 +410,9 @@ export function SmartPWAInstallGate() {
               <Button
                 type="button"
                 onClick={handleIosProfileInstall}
-                className="w-full h-11 text-xs font-extrabold bg-white hover:bg-zinc-200 text-black rounded-xl shadow-md gap-2"
+                className="w-full h-auto min-h-[44px] py-2.5 px-3 whitespace-normal text-center leading-snug text-xs font-extrabold bg-white hover:bg-zinc-200 text-black rounded-xl shadow-md gap-2"
               >
-                <Smartphone className="h-4 w-4" />
+                <Smartphone className="h-4 w-4 shrink-0" />
                 One-Tap iOS Profile Installer ({appDisplayName} Icon)
               </Button>
 

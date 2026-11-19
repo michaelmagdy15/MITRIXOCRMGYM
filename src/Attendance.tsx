@@ -1356,6 +1356,8 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
     const tokenLower = lookupToken.toLowerCase().trim();
     const tokenCompact = tokenLower.replace(/\s|-/g, '');
+    const tokenDigits = tokenCompact.replace(/\D/g, '');
+    const tokenHasLetters = /[a-z]/i.test(lookupToken);
     const pool = allClients && allClients.length > 0 ? allClients : clients;
 
     const matchesClientCode = (c: any) => {
@@ -1365,6 +1367,16 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         if (!s) return false;
         return s === tokenLower || s.replace(/\s|-/g, '') === tokenCompact;
       };
+      const phoneMatches = (val: unknown) => {
+        if (!val) return false;
+        const raw = String(val).trim();
+        if (raw === lookupToken) return true;
+        if (!tokenHasLetters && tokenDigits.length >= 10) {
+          const valDigits = raw.replace(/\D/g, '');
+          return valDigits.length >= 10 && valDigits.slice(-10) === tokenDigits.slice(-10);
+        }
+        return false;
+      };
       return (
         c.id === lookupToken ||
         eq(c.memberId) ||
@@ -1372,7 +1384,8 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         eq(c.redgitsId) ||
         eq(c.barcode) ||
         eq(c.cardId) ||
-        (c.phone && c.phone === lookupToken) ||
+        phoneMatches(c.phone) ||
+        phoneMatches(c.normalizedPhone) ||
         (c.guestSerial && c.guestSerial === lookupToken) ||
         (Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(eq)) ||
         (Array.isArray(c.packages) && c.packages.some((p: any) => eq(p?.barcode)))
@@ -1386,7 +1399,8 @@ function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       try {
         const localMatches = await searchMembersLocal(getTenantId(), lookupToken);
         if (localMatches && localMatches.length > 0) {
-          member = localMatches.find(matchesClientCode) || localMatches[0];
+          // Require strict code/phone match so partial phone substring hits never hijacks letter-prefixed codes
+          member = localMatches.find(matchesClientCode);
         }
       } catch {}
     }
