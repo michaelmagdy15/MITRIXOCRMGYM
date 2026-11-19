@@ -25,11 +25,35 @@ window.addEventListener('vite:preloadError', (event) => {
 
 // Register service worker for PWA features (offline support, caching)
 if ('serviceWorker' in navigator) {
-  const updateSW = registerSW({
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshing = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || refreshing) return;
+    const key = 'mitrixo_sw_controller_reload_at';
+    const lastReload = Number(sessionStorage.getItem(key) || '0');
+    if (Date.now() - lastReload > 30000) {
+      refreshing = true;
+      sessionStorage.setItem(key, String(Date.now()));
+      window.location.reload();
+    }
+  });
+
+  registerSW({
     onNeedRefresh() {
-      // Prompt user to update
-    },onRegisteredSW(swUrl: any, r: any) {
+      // Reload occurs on controllerchange when skipWaiting promotes the new SW
+    },
+    onRegisteredSW(swUrl: any, r: any) {
       console.log(`Service Worker registered: ${swUrl}`);
+      if (r && typeof r.update === 'function') {
+        const checkUpdate = () => {
+          if (document.visibilityState === 'visible') {
+            r.update().catch(() => {});
+          }
+        };
+        document.addEventListener('visibilitychange', checkUpdate);
+        window.setInterval(checkUpdate, 10 * 60 * 1000);
+      }
     },
     onRegisterError(error: any) {
       console.error('Service Worker registration error', error);
