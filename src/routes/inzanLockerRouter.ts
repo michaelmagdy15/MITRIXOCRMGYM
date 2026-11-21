@@ -1537,7 +1537,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CRM_URL = os.environ.get("INZAN_CRM_URL", "https://admin.inzanathletics.com").rstrip("/")
+CRM_URL = os.environ.get("INZAN_CRM_URL", "https://mitrixo-gateway.onrender.com").rstrip("/")
 PRIMARY_LOCAL_URL = os.environ.get("INZAN_LOCAL_LOCKER_URL", "http://192.168.10.31:3701").rstrip("/")
 LOCKER_USER = os.environ.get("INZAN_LOCKER_USER", "admin")
 LOCKER_PASS = os.environ.get("INZAN_LOCKER_PASS", "")
